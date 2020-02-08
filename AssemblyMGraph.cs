@@ -93,11 +93,11 @@ namespace BindingRedirectR
             });
         }
 
-        public IEnumerable<AssemblyMNode> GetNodesToLoadFromFile() 
-            => new NodesToLoadEnumerable(() => Nodes, x => x.LoadedFromFile == AssemblyLoadStatus.NotAttempted && x.File != null);
+        public IEnumerable<AssemblyMNode> GetNodesToLoadFromFile()
+            => new NodesToLoadEnumerable(() => Nodes, x => x.LoadedFromFile == AssemblyLoadStatus.NotAttempted && !x.Loaded && x.File != null);
 
-        public IEnumerable<AssemblyMNode> GetNodesToLoadFromName() 
-            => new NodesToLoadEnumerable(() => Nodes, x => x.LoadedFromName == AssemblyLoadStatus.NotAttempted && x.Name != null);
+        public IEnumerable<AssemblyMNode> GetNodesToLoadFromName()
+            => new NodesToLoadEnumerable(() => Nodes, x => x.LoadedFromName == AssemblyLoadStatus.NotAttempted && !x.Loaded && x.Name != null);
 
         private class NodesToLoadEnumerable : IEnumerable<AssemblyMNode>
         {
@@ -134,12 +134,12 @@ namespace BindingRedirectR
             {
                 var nodesToProcess = new HashSet<AssemblyMNode>(_nodesAccessor());
                 nodesToProcess.ExceptWith(_processedNodes);
-                
+
                 foreach (var node in nodesToProcess)
                 {
                     _processedNodes.Add(node);
 
-                    if (!_filter(node)) 
+                    if (!_filter(node))
                         continue;
 
                     Current = node;
@@ -171,18 +171,21 @@ namespace BindingRedirectR
                 case AssemblyLoadStatus.Failed:
                     throw new InvalidOperationException("Cannot load assembly from file, previous attempt failed.");
             }
+            
+            if (node.Loaded)
+                throw new InvalidOperationException("Cannot load assembly from file, it's already been loaded.");
 
             var fileFullName = node.File.FullName;
             try
             {
-                Log.Information("Loading from file {File}.", fileFullName);
+                Log.Debug("Loading from file {File}.", fileFullName);
                 var assembly = Assembly.ReflectionOnlyLoadFrom(fileFullName);
                 node.MarkAsLoadedFromFile(assembly);
                 ProcessLoadedNode(node);
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to load from file {File}.", fileFullName);
+                Log.Debug(ex, "Failed to load from file {File}.", fileFullName);
                 node.MarkAsFailedFromFile(ex);
             }
         }
@@ -200,18 +203,21 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot load assembly from name, previous attempt failed.");
             }
 
+            if (node.Loaded)
+                throw new InvalidOperationException("Cannot load assembly from name, it's already been loaded.");
+
             var assemblyString = node.Name.ToString();
-            
+
             try
             {
-                Log.Information("Loading from name {AssemblyName}.", assemblyString);
+                Log.Debug("Loading from name {AssemblyName}.", assemblyString);
                 var assembly = Assembly.ReflectionOnlyLoad(assemblyString);
                 node.MarkAsLoadedFromName(assembly);
                 ProcessLoadedNode(node);
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to load from name {AssemblyName}.", assemblyString);
+                Log.Debug(ex, "Failed to load from name {AssemblyName}.", assemblyString);
                 node.MarkAsFailedFromName(ex);
             }
         }
@@ -268,16 +274,22 @@ namespace BindingRedirectR
 
             Nodes.Remove(sourceNode);
 
-            var nameKey = GetKeyFromName(sourceNode.Name);
-            if (NodeByName.TryRemove(nameKey, out _))
+            if (sourceNode.Name != null)
             {
-                NodeByName[nameKey] = targetNode;
+                var nameKey = GetKeyFromName(sourceNode.Name);
+                if (NodeByName.TryRemove(nameKey, out _))
+                {
+                    NodeByName[nameKey] = targetNode;
+                }
             }
 
-            var fileKey = GetKeyFromFile(sourceNode.File);
-            if (NodeByFile.TryRemove(fileKey, out _))
+            if (sourceNode.File != null)
             {
-                NodeByFile[fileKey] = targetNode;
+                var fileKey = GetKeyFromFile(sourceNode.File);
+                if (NodeByFile.TryRemove(fileKey, out _))
+                {
+                    NodeByFile[fileKey] = targetNode;
+                }
             }
 
             if (DependencyByNode.TryRemove(sourceNode, out var sourceNodeDependencies))

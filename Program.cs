@@ -1,36 +1,28 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Linq;
 using Serilog;
-using Serilog.Core;
 using static System.Console;
 
 namespace BindingRedirectR
 {
-    /// <remarks>
-    /// TODO: can we add some way of adding other missed references (dynamic, aka runtime dependencies -- stuff referenced from Web.config, dynamically loaded assemblies, etc.)
-    /// TODO: allow to specify the main assembly
-    /// TODO: aggregate the output as the list of binding redirects, provide reasoning behind each, e.g.:
-    /// - redirecting to 12.0.0.0, because AssemblyFoo references 11.0.0.0 and AssemblyBar and AssemblyBaz references 10.0.0.0
-    /// </remarks>
     internal class Program
     {
-        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
+        private static readonly ILogger Log = (Serilog.Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .WriteTo.Console()
+                .CreateLogger())
+            .ForContext<Program>();
 
         private static readonly string Separator = new string('-', 20);
         private static readonly Version VersionZero = new Version(0, 0, 0, 0);
 
         private static void Main()
         {
-            Serilog.Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Verbose()
-                .WriteTo.Console()
-                .CreateLogger();
-
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 Log.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
                 Log.Information("Press any key to exit.");
+                Serilog.Log.CloseAndFlush();
                 ReadKey();
                 Environment.Exit(1);
             };
@@ -39,13 +31,15 @@ namespace BindingRedirectR
             Run(inputParameters);
 
             Log.Information(Separator);
-            Log.Information("Press any key to finish");
+            Log.Information("Press any key to exit.");
+            Serilog.Log.CloseAndFlush();
             ReadKey();
         }
 
         private static void Run(InputParameters inputParameters)
         {
-            Log.Verbose("Run started.");
+            Log.Information("Run started.");
+            Log.Information(Separator);
 
             var graph = new AssemblyMGraph();
 
@@ -78,7 +72,11 @@ namespace BindingRedirectR
                 graph.LoadNodeFromName(node);
             }
 
-            Log.Verbose("Run finished.");
+            Log.Information(Separator);
+            Log.Information("Entire graph processed.");
+            
+            Log.Information(Separator);
+            Log.Information("Run finished.");
         }
 
         private static void ProcessNode(AssemblyNode node)
@@ -172,7 +170,7 @@ namespace BindingRedirectR
                     .Where(x => x.Version != highestLoadedPathVersion.Version)
                     .OrderBy(x => x.Version)
                     .ToList();
-                
+
                 if (!otherLoadedPathVersions.Any())
                 {
                     Log.Information("There are no other loaded versions.");
@@ -188,7 +186,7 @@ namespace BindingRedirectR
             }
 
             // recommend binding redirect
-           var targetVersion = (highestLoadedVersion ?? VersionZero) > (highestReferencedVersion ?? VersionZero)
+            var targetVersion = (highestLoadedVersion ?? VersionZero) > (highestReferencedVersion ?? VersionZero)
                 ? highestLoadedVersion
                 : highestReferencedVersion;
 

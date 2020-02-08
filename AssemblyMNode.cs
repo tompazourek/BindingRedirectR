@@ -20,9 +20,12 @@ namespace BindingRedirectR
         public AssemblyLoadStatus LoadedFromFile { get; private set; }
         public Exception LoadedFromFileError { get; private set; }
 
+        public bool Loaded { get; private set; }
+
         public static AssemblyMNode CreateFromName(AssemblyName assemblyName)
         {
-            Log.Information("Creating node from name {AssemblyName}.", assemblyName);
+            if (assemblyName == null) throw new ArgumentNullException(nameof(assemblyName));
+            Log.Debug("Creating node from name {AssemblyName}.", assemblyName);
             return new AssemblyMNode
             {
                 Name = assemblyName,
@@ -32,7 +35,8 @@ namespace BindingRedirectR
 
         public static AssemblyMNode CreateFromFile(FileInfo file)
         {
-            Log.Information("Creating node from file {File}.", file.FullName);
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            Log.Debug("Creating node from file {File}.", file.FullName);
             return new AssemblyMNode
             {
                 File = file,
@@ -56,10 +60,14 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot mark assembly as loaded from file, it's already loaded from name.");
             }
 
+            if (Loaded)
+                throw new InvalidOperationException("Cannot mark assembly as loaded from file, it's already been loaded.");
+
             LoadedFromFile = AssemblyLoadStatus.Loaded;
             Assembly = assembly;
             Name = assembly.GetName();
             Identity = new AssemblySpecificIdentity(Name);
+            Loaded = true;
         }
 
         public void MarkAsFailedFromFile(Exception exception)
@@ -77,6 +85,9 @@ namespace BindingRedirectR
                 case AssemblyLoadStatus.Loaded:
                     throw new InvalidOperationException("Cannot mark assembly as failed from file, it's already loaded from name.");
             }
+
+            if (Loaded)
+                throw new InvalidOperationException("Cannot mark assembly as failed from file, it's already been loaded.");
 
             LoadedFromFile = AssemblyLoadStatus.Failed;
             LoadedFromFileError = exception;
@@ -98,9 +109,13 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot mark assembly as loaded from name, it's already loaded from file.");
             }
 
+            if (Loaded)
+                throw new InvalidOperationException("Cannot mark assembly as loaded from name, it's already been loaded.");
+
             LoadedFromName = AssemblyLoadStatus.Loaded;
             Assembly = assembly;
             File = new FileInfo(assembly.Location);
+            Loaded = true;
         }
 
         public void MarkAsFailedFromName(Exception exception)
@@ -119,8 +134,25 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot mark assembly as failed from name, it's already loaded from file.");
             }
 
+            if (Loaded)
+                throw new InvalidOperationException("Cannot mark assembly as failed from name, it's already been loaded.");
+
             LoadedFromName = AssemblyLoadStatus.Failed;
             LoadedFromNameError = exception;
+        }
+
+        public override string ToString()
+        {
+            if (!Loaded)
+            {
+                if (File != null)
+                    return $"[not loaded] {File.FullName}";
+                if (Name != null)
+                    return $"[not loaded] {Name.FullName}";
+                return "[not loaded] (unknown)"; // shouldn't happen
+            }
+
+            return Identity.ToString();
         }
     }
 }

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29709.97
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BindingRedirectR", "BindingRedirectR.csproj", "{EBB4C8FA-ADF0-44FA-8BA5-46015397718A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BindingRedirectR", "BindingRedirectR.csproj", "{E2876978-553F-4932-95EB-7F19A0527E86}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,13 +11,13 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{EBB4C8FA-ADF0-44FA-8BA5-46015397718A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EBB4C8FA-ADF0-44FA-8BA5-46015397718A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EBB4C8FA-ADF0-44FA-8BA5-46015397718A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EBB4C8FA-ADF0-44FA-8BA5-46015397718A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2876978-553F-4932-95EB-7F19A0527E86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2876978-553F-4932-95EB-7F19A0527E86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2876978-553F-4932-95EB-7F19A0527E86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2876978-553F-4932-95EB-7F19A0527E86}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = TRUE
+		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0598B200-99C8-4CA0-8949-AA2C237E73AD}

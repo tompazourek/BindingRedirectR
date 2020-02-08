@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Linq;
 using Serilog;
+using Serilog.Core;
 using static System.Console;
 
 namespace BindingRedirectR
@@ -14,16 +15,18 @@ namespace BindingRedirectR
     /// </remarks>
     internal class Program
     {
-        private static readonly ILogger Log = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .WriteTo.Console()
-            .CreateLogger();
+        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
 
         private static readonly string Separator = new string('-', 20);
         private static readonly Version VersionZero = new Version(0, 0, 0, 0);
 
         private static void Main()
         {
+            Serilog.Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .WriteTo.Console()
+                .CreateLogger();
+
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 Log.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
@@ -36,6 +39,8 @@ namespace BindingRedirectR
             Run(inputParameters);
 
             Log.Information(Separator);
+            Log.Information("Press any key to finish");
+            ReadKey();
         }
 
         private static void Run(InputParameters inputParameters)

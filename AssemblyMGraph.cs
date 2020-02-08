@@ -4,11 +4,14 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using Serilog;
 
 namespace BindingRedirectR
 {
     internal class AssemblyMGraph
     {
+        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
+
         public AssemblyMNode EnsureNodeWithAssemblySource(string assemblySource)
         {
             if (IsValidAssemblyString(assemblySource, out var name))
@@ -48,10 +51,10 @@ namespace BindingRedirectR
             }
         }
 
-        private static readonly HashSet<AssemblyMNode> Nodes = new HashSet<AssemblyMNode>();
+        private readonly HashSet<AssemblyMNode> Nodes = new HashSet<AssemblyMNode>();
 
-        private static readonly ConcurrentDictionary<string, AssemblyMNode> NodeByName = new ConcurrentDictionary<string, AssemblyMNode>(StringComparer.OrdinalIgnoreCase);
-        private static string GetKeyFromName(AssemblyName name) => name.FullName;
+        private readonly ConcurrentDictionary<string, AssemblyMNode> NodeByName = new ConcurrentDictionary<string, AssemblyMNode>(StringComparer.OrdinalIgnoreCase);
+        private string GetKeyFromName(AssemblyName name) => name.FullName;
 
         public AssemblyMNode EnsureNodeWithName(AssemblyName name)
         {
@@ -61,8 +64,8 @@ namespace BindingRedirectR
             return node;
         }
 
-        private static readonly ConcurrentDictionary<string, AssemblyMNode> NodeByFile = new ConcurrentDictionary<string, AssemblyMNode>(StringComparer.OrdinalIgnoreCase);
-        private static string GetKeyFromFile(FileInfo file) => Path.GetFullPath(file.FullName);
+        private readonly ConcurrentDictionary<string, AssemblyMNode> NodeByFile = new ConcurrentDictionary<string, AssemblyMNode>(StringComparer.OrdinalIgnoreCase);
+        private string GetKeyFromFile(FileInfo file) => Path.GetFullPath(file.FullName);
 
         public AssemblyMNode EnsureNodeWithFile(FileInfo file)
         {
@@ -72,8 +75,8 @@ namespace BindingRedirectR
             return node;
         }
 
-        private static readonly ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>> DependencyByNode = new ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>>();
-        private static readonly ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>> DependantByNode = new ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>>();
+        private readonly ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>> DependencyByNode = new ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>>();
+        private readonly ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>> DependantByNode = new ConcurrentDictionary<AssemblyMNode, HashSet<AssemblyMNode>>();
 
         public void RegisterDependency(AssemblyMNode dependant, AssemblyMNode dependency)
         {
@@ -169,14 +172,17 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot load assembly from file, previous attempt failed.");
             }
 
+            var fileFullName = node.File.FullName;
             try
             {
-                var assembly = Assembly.ReflectionOnlyLoadFrom(node.File.FullName);
+                Log.Information("Loading from file {File}.", fileFullName);
+                var assembly = Assembly.ReflectionOnlyLoadFrom(fileFullName);
                 node.MarkAsLoadedFromFile(assembly);
                 ProcessLoadedNode(node);
             }
             catch (Exception ex)
             {
+                Log.Warning(ex, "Failed to load from file {File}.", fileFullName);
                 node.MarkAsFailedFromFile(ex);
             }
         }
@@ -194,14 +200,18 @@ namespace BindingRedirectR
                     throw new InvalidOperationException("Cannot load assembly from name, previous attempt failed.");
             }
 
+            var assemblyString = node.Name.ToString();
+            
             try
             {
-                var assembly = Assembly.ReflectionOnlyLoad(node.Name.ToString());
+                Log.Information("Loading from name {AssemblyName}.", assemblyString);
+                var assembly = Assembly.ReflectionOnlyLoad(assemblyString);
                 node.MarkAsLoadedFromName(assembly);
                 ProcessLoadedNode(node);
             }
             catch (Exception ex)
             {
+                Log.Warning(ex, "Failed to load from name {AssemblyName}.", assemblyString);
                 node.MarkAsFailedFromName(ex);
             }
         }

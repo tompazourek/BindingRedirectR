@@ -1,11 +1,14 @@
 ﻿using System;
 using System.IO;
 using System.Reflection;
+using Serilog;
 
 namespace BindingRedirectR
 {
     internal class AssemblyMNode
     {
+        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
+
         public AssemblySpecificIdentity Identity { get; private set; }
         public Assembly Assembly { get; private set; }
 
@@ -18,18 +21,24 @@ namespace BindingRedirectR
         public Exception LoadedFromFileError { get; private set; }
 
         public static AssemblyMNode CreateFromName(AssemblyName assemblyName)
-            => new AssemblyMNode
+        {
+            Log.Information("Creating node from name {AssemblyName}.", assemblyName);
+            return new AssemblyMNode
             {
                 Name = assemblyName,
                 Identity = new AssemblySpecificIdentity(assemblyName),
             };
-        
+        }
+
         public static AssemblyMNode CreateFromFile(FileInfo file)
-            => new AssemblyMNode
+        {
+            Log.Information("Creating node from file {File}.", file.FullName);
+            return new AssemblyMNode
             {
                 File = file,
                 // we don't have identity until we attempt to load
             };
+        }
 
         public void MarkAsLoadedFromFile(Assembly assembly)
         {

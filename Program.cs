@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Serilog;
 using static System.Console;
 
@@ -22,7 +20,6 @@ namespace BindingRedirectR
             .CreateLogger();
 
         private static readonly string Separator = new string('-', 20);
-        private static readonly ConcurrentDictionary<AssemblyIdentity, AssemblyNode> NodesByIdentity = new ConcurrentDictionary<AssemblyIdentity, AssemblyNode>();
         private static readonly Version VersionZero = new Version(0, 0, 0, 0);
 
         private static void Main()
@@ -35,148 +32,45 @@ namespace BindingRedirectR
                 Environment.Exit(1);
             };
 
-            var assemblyPaths = SampleInput.SomePaths;
-            Run(assemblyPaths);
+            var inputParameters = SampleInputs.Foo;
+            Run(inputParameters);
 
             Log.Information(Separator);
         }
 
-        private static void Run(IEnumerable<string> assemblyPaths)
+        private static void Run(InputParameters inputParameters)
         {
             Log.Verbose("Run started.");
 
-            var dependenciesToCheckForGac = new Stack<AssemblyEdge>();
+            var graph = new AssemblyMGraph();
+
+            // register assembly sources
+            foreach (var assemblySource in inputParameters.AssemblySources)
+            {
+                graph.EnsureNodeWithAssemblySource(assemblySource);
+            }
+
+            // register main assembly
+            graph.EnsureNodeWithAssemblySource(inputParameters.MainAssemblySource);
+
+            // register manual references
+            foreach (var (dependantSource, dependencySource) in inputParameters.ManualReferences)
+            {
+                var dependant = graph.EnsureNodeWithAssemblySource(dependantSource);
+                var dependency = graph.EnsureNodeWithAssemblySource(dependencySource);
+                graph.RegisterDependency(dependant, dependency);
+            }
 
             // load assemblies from files
-            foreach (var path in assemblyPaths)
+            foreach (var node in graph.GetNodesToLoadFromFile())
             {
-                Log.Debug(Separator);
-                Log.Debug("Loading file {Path}.", path);
-
-                Assembly assembly;
-                try
-                {
-                    assembly = Assembly.ReflectionOnlyLoadFrom(path);
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "Couldn't load assembly from [{Path}].", path);
-                    continue;
-                }
-
-                var assemblyName = assembly.GetName();
-                var assemblyIdentity = new AssemblyIdentity(assemblyName);
-                var assemblyVersion = assemblyName.Version;
-                var assemblyNode = NodesByIdentity.GetOrAdd(assemblyIdentity, x => new AssemblyNode(x));
-                assemblyNode.PathVersions.Add(new AssemblyPathVersion(path, assemblyVersion));
-
-                Log.Debug("Loaded [{AssemblyIdentity}] Version={Version}.", assemblyIdentity, assemblyVersion);
-
-                foreach (var referencedAssemblyName in assembly.GetReferencedAssemblies())
-                {
-                    var referencedAssemblyIdentity = new AssemblyIdentity(referencedAssemblyName);
-                    var referencedAssemblyVersion = referencedAssemblyName.Version;
-                    var referencedAssemblyNode = NodesByIdentity.GetOrAdd(referencedAssemblyIdentity, x => new AssemblyNode(x));
-
-                    var dependency = new AssemblyEdge(referencedAssemblyNode, referencedAssemblyVersion, assemblyVersion);
-                    var dependant = new AssemblyEdge(assemblyNode, assemblyVersion, referencedAssemblyVersion);
-                    assemblyNode.Dependencies.Add(dependency);
-                    referencedAssemblyNode.Dependants.Add(dependant);
-                    dependenciesToCheckForGac.Push(dependency);
-
-                    Log.Debug("Depends on [{AssemblyIdentity}] Version={Version}.", referencedAssemblyIdentity, referencedAssemblyVersion);
-                }
+                graph.LoadNodeFromFile(node);
             }
 
-            // load assemblies from GAC
-            var assemblyStringsUnloadable = new HashSet<string>();
-            while (dependenciesToCheckForGac.Any())
+            // load assemblies from assembly names
+            foreach (var node in graph.GetNodesToLoadFromName())
             {
-                var edge = dependenciesToCheckForGac.Pop();
-                if (edge.TargetNode.PathVersions.Any(x => x.Version == edge.TargetVersion))
-                {
-                    // it's already loaded
-                    continue;
-                }
-
-                var assemblyString = edge.GetTargetAsAssemblyString();
-
-                if (assemblyStringsUnloadable.Contains(assemblyString))
-                {
-                    // errored before, won't try again
-                    continue;
-                }
-
-                Log.Information(Separator);
-                Log.Information("Loading from GAC [{AssemblyString}].", assemblyString);
-
-                Assembly assembly;
-                try
-                {
-                    assembly = Assembly.ReflectionOnlyLoad(assemblyString);
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "Couldn't load GAC assembly [{AssemblyString}].", assemblyString);
-                    assemblyStringsUnloadable.Add(assemblyString);
-                    continue;
-                }
-
-                var path = assembly.Location;
-                var assemblyName = assembly.GetName();
-                var assemblyIdentity = new AssemblyIdentity(assemblyName);
-                var assemblyVersion = assemblyName.Version;
-                var assemblyNode = NodesByIdentity.GetOrAdd(assemblyIdentity, x => new AssemblyNode(x));
-                assemblyNode.PathVersions.Add(new AssemblyPathVersion(path, assemblyVersion));
-
-                Log.Information("Loaded [{AssemblyIdentity}] Version={Version}.", assemblyIdentity, assemblyVersion);
-
-                foreach (var referencedAssemblyName in assembly.GetReferencedAssemblies())
-                {
-                    var referencedAssemblyIdentity = new AssemblyIdentity(referencedAssemblyName);
-                    var referencedAssemblyVersion = referencedAssemblyName.Version;
-                    var referencedAssemblyNode = NodesByIdentity.GetOrAdd(referencedAssemblyIdentity, x => new AssemblyNode(x));
-
-                    var dependency = new AssemblyEdge(referencedAssemblyNode, referencedAssemblyVersion, assemblyVersion);
-                    var dependant = new AssemblyEdge(assemblyNode, assemblyVersion, referencedAssemblyVersion);
-                    assemblyNode.Dependencies.Add(dependency);
-                    referencedAssemblyNode.Dependants.Add(dependant);
-                    dependenciesToCheckForGac.Push(dependency);
-
-                    Log.Information("Depends on [{AssemblyIdentity}] Version={Version}.", referencedAssemblyIdentity, referencedAssemblyVersion);
-                }
-            }
-
-            var nodes = NodesByIdentity.Values
-                .OrderBy(x => x.AssemblyIdentity.Name)
-                .ThenBy(x => x.AssemblyIdentity.Culture)
-                .ThenBy(x => x.AssemblyIdentity.PublicKeyToken)
-                .ToList();
-
-            Log.Information(Separator);
-            Log.Information("Collected {NodeCount} nodes:", nodes.Count);
-
-            foreach (var node in nodes)
-            {
-                Log.Information("{Node}", node);
-            }
-
-            Log.Information(Separator);
-
-            var leafNodes = nodes.Where(x => !x.Dependants.Any()).ToList();
-            Log.Information("These are the {NodeCount} leaf nodes (no dependants):", leafNodes.Count);
-
-            var rootNodes = nodes.Where(x => !x.Dependencies.Any()).ToList();
-            Log.Information("These are the {NodeCount} root nodes (no dependencies):", rootNodes.Count);
-
-            foreach (var node in rootNodes)
-            {
-                Log.Information("{Node}", node);
-            }
-
-            foreach (var node in rootNodes)
-            {
-                node.VisitNodeAndDependants(ProcessNode);
+                graph.LoadNodeFromName(node);
             }
 
             Log.Verbose("Run finished.");
@@ -187,13 +81,13 @@ namespace BindingRedirectR
             Log.Information(Separator);
             Log.Information(Separator);
 
-            Log.Information("Processing dependency [{AssemblyIdentity}].", node.AssemblyIdentity);
+            Log.Information("Processing dependency [{AssemblyIdentity}].", node.AssemblyGroupIdentity);
 
             var directDependants = node.Dependants;
             var dependants = node.GetDependantsIncludingTransient()
-                .OrderBy(x => x.TargetNode.AssemblyIdentity.Name)
-                .ThenBy(x => x.TargetNode.AssemblyIdentity.Culture)
-                .ThenBy(x => x.TargetNode.AssemblyIdentity.PublicKeyToken)
+                .OrderBy(x => x.TargetNode.AssemblyGroupIdentity.Name)
+                .ThenBy(x => x.TargetNode.AssemblyGroupIdentity.Culture)
+                .ThenBy(x => x.TargetNode.AssemblyGroupIdentity.PublicKeyToken)
                 .ThenBy(x => x.TargetVersion)
                 .ToList();
 
@@ -208,14 +102,14 @@ namespace BindingRedirectR
 
                 Log.Information("[{Version}] Assemblies with direct dependencies:", versionGroup.Key);
                 var versionGroupDirect = versionGroup.Where(x => directDependants.Contains(x)).ToList();
-                foreach (var assemblyIdentity in versionGroupDirect.Select(x => x.TargetNode.AssemblyIdentity).ToHashSet())
+                foreach (var assemblyIdentity in versionGroupDirect.Select(x => x.TargetNode.AssemblyGroupIdentity).ToHashSet())
                 {
                     Log.Information("{AssemblyIdentity}", assemblyIdentity);
                 }
 
                 Log.Information("[{Version}] Assemblies with transient dependencies:", versionGroup.Key);
                 var versionGroupTransient = versionGroup.Where(x => !directDependants.Contains(x)).ToList();
-                foreach (var assemblyIdentity in versionGroupTransient.Select(x => x.TargetNode.AssemblyIdentity).ToHashSet())
+                foreach (var assemblyIdentity in versionGroupTransient.Select(x => x.TargetNode.AssemblyGroupIdentity).ToHashSet())
                 {
                     Log.Information("{AssemblyIdentity}", assemblyIdentity);
                 }
@@ -223,7 +117,7 @@ namespace BindingRedirectR
 
             Log.Information(Separator);
 
-            Log.Information("Results for dependency [{AssemblyIdentity}].", node.AssemblyIdentity);
+            Log.Information("Results for dependency [{AssemblyIdentity}].", node.AssemblyGroupIdentity);
 
             // find highest referenced and other referenced
             var referencedVersions = dependantsByVersion.Select(x => x.Key).ToHashSet();
@@ -302,7 +196,7 @@ namespace BindingRedirectR
             else
             {
                 var redirectApplyTargets = dependants.Where(x => x.SourceVersion != targetVersion)
-                    .Select(x => x.TargetNode.AssemblyIdentity)
+                    .Select(x => x.TargetNode.AssemblyGroupIdentity)
                     .Distinct()
                     .OrderBy(x => x.Name)
                     .ThenBy(x => x.Culture)
@@ -332,7 +226,7 @@ namespace BindingRedirectR
                 if (highestLoadedVersion != targetVersion)
                 {
                     var alternativeRedirectApplyTargets = dependants.Where(x => x.SourceVersion != highestLoadedVersion)
-                        .Select(x => x.TargetNode.AssemblyIdentity)
+                        .Select(x => x.TargetNode.AssemblyGroupIdentity)
                         .Distinct()
                         .OrderBy(x => x.Name)
                         .ThenBy(x => x.Culture)

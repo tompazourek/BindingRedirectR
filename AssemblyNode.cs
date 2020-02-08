@@ -5,7 +5,7 @@ namespace BindingRedirectR
 {
     internal readonly struct AssemblyNode
     {
-        public AssemblyIdentity AssemblyIdentity { get; }
+        public AssemblyGroupIdentity AssemblyGroupIdentity { get; }
 
         public ISet<AssemblyPathVersion> PathVersions { get; }
 
@@ -13,14 +13,14 @@ namespace BindingRedirectR
 
         public ISet<AssemblyEdge> Dependants { get; }
 
-        public AssemblyNode(in AssemblyIdentity assemblyIdentity)
+        public AssemblyNode(in AssemblyGroupIdentity assemblyGroupIdentity)
         {
-            AssemblyIdentity = assemblyIdentity;
+            AssemblyGroupIdentity = assemblyGroupIdentity;
             PathVersions = new HashSet<AssemblyPathVersion>();
             Dependencies = new HashSet<AssemblyEdge>();
             Dependants = new HashSet<AssemblyEdge>();
         }
 
-        public override string ToString() => AssemblyIdentity.ToString();
+        public override string ToString() => AssemblyGroupIdentity.ToString();
     }
 }

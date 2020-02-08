@@ -18,7 +18,7 @@ namespace BindingRedirectR
         /// <summary>
         /// Assembly string in the format useful for loading assemblies.
         /// </summary>
-        public string GetTargetAsAssemblyString() => $"{TargetNode.AssemblyIdentity.Name}, Version={TargetVersion}, Culture={TargetNode.AssemblyIdentity.Culture}, PublicKeyToken={TargetNode.AssemblyIdentity.PublicKeyToken ?? "null"}";
+        public string GetTargetAsAssemblyString() => $"{TargetNode.AssemblyGroupIdentity.Name}, Version={TargetVersion}, Culture={TargetNode.AssemblyGroupIdentity.Culture}, PublicKeyToken={TargetNode.AssemblyGroupIdentity.PublicKeyToken ?? "null"}";
 
         public override string ToString() => $"[{SourceVersion}] {GetTargetAsAssemblyString()}";
 

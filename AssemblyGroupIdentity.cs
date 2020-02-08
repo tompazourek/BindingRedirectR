@@ -4,13 +4,13 @@ using System.Reflection;
 
 namespace BindingRedirectR
 {
-    internal readonly struct AssemblyIdentity : IEquatable<AssemblyIdentity>
+    internal readonly struct AssemblyGroupIdentity : IEquatable<AssemblyGroupIdentity>
     {
         public string Name { get; }
         public string PublicKeyToken { get; }
         public string Culture { get; }
 
-        public AssemblyIdentity(AssemblyName assemblyName)
+        public AssemblyGroupIdentity(AssemblyName assemblyName)
         {
             if (assemblyName == null)
                 throw new ArgumentNullException(nameof(assemblyName));
@@ -21,7 +21,7 @@ namespace BindingRedirectR
             Name = assemblyName.Name;
 
             var publicKeyTokenBytes = assemblyName.GetPublicKeyToken();
-            if (publicKeyTokenBytes.Any())
+            if (publicKeyTokenBytes?.Any() == true)
             {
                 PublicKeyToken = string.Concat(publicKeyTokenBytes.Select(x => x.ToString("x2")));
             }
@@ -45,11 +45,11 @@ namespace BindingRedirectR
 
         #region Equality
 
-        public bool Equals(AssemblyIdentity other)
+        public bool Equals(AssemblyGroupIdentity other)
             => Name == other.Name && PublicKeyToken == other.PublicKeyToken && Culture == other.Culture;
 
         public override bool Equals(object obj)
-            => obj is AssemblyIdentity other && Equals(other);
+            => obj is AssemblyGroupIdentity other && Equals(other);
 
         public override int GetHashCode()
         {
@@ -62,9 +62,9 @@ namespace BindingRedirectR
             }
         }
 
-        public static bool operator ==(AssemblyIdentity left, AssemblyIdentity right) => left.Equals(right);
+        public static bool operator ==(AssemblyGroupIdentity left, AssemblyGroupIdentity right) => left.Equals(right);
 
-        public static bool operator !=(AssemblyIdentity left, AssemblyIdentity right) => !left.Equals(right);
+        public static bool operator !=(AssemblyGroupIdentity left, AssemblyGroupIdentity right) => !left.Equals(right);
 
         #endregion
     }

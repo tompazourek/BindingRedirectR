@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Serilog;
 using static System.Console;
@@ -74,10 +75,156 @@ namespace BindingRedirectR
 
             Log.Information(Separator);
             Log.Information("Entire graph processed.");
-            
+
+            // locate the main assembly
+            var mainNode = graph.EnsureNodeWithAssemblySource(inputParameters.MainAssemblySource);
+
+            Log.Information(Separator);
+            Log.Information("Overview for [{AssemblyName}]", mainNode.Name);
+
+            Log.Information(Separator);
+            Log.Information("Direct references:");
+            foreach (var dependencyGroup in graph.GetDirectDependencies(mainNode).GroupBy(x => x.Identity.Group).OrderBy(x => x.Key.ToString()))
+            {
+                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+            }
+
+            Log.Information(Separator);
+            Log.Information("Indirect references:");
+            foreach (var dependencyGroup in graph.GetIndirectDependencies(mainNode).GroupBy(x => x.Identity.Group).OrderBy(x => x.Key.ToString()))
+            {
+                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+            }
+
+            Log.Information(Separator);
+            Log.Information("All references:");
+            var allMainDependencies = graph.GetAllDependencies(mainNode).ToHashSet();
+            foreach (var dependencyGroup in allMainDependencies.GroupBy(x => x.Identity.Group).OrderBy(x => x.Key.ToString()))
+            {
+                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+            }
+
+            var nodes = graph.GetAllNodes().OrderBy(x => x.Identity.Group.ToString()).ThenBy(x => x.Identity.Version).ToList();
+            var nodesByGroup = nodes.ToLookup(x => x.Identity.Group);
+
+            var nodesNotLoaded = nodes.Where(node => !node.Loaded).ToList();
+            if (nodesNotLoaded.Any())
+            {
+                Log.Information(Separator);
+                Log.Information("Assemblies that couldn't be loaded:");
+
+                foreach (var node in nodesNotLoaded)
+                {
+                    Log.Information(Separator);
+
+                    if (node.Name != null)
+                    {
+                        Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Group, new[] { node }));
+                    }
+                    else
+                    {
+                        Log.Information("{File}", node.File.FullName);
+                    }
+
+                    if (node.LoadedFromName == AssemblyLoadStatus.Failed)
+                    {
+                        Log.Information("Couldn't load from assembly name. Exception message: {ExceptionMessage}", node.LoadedFromNameError.Message);
+                    }
+                    else if (node.LoadedFromFile == AssemblyLoadStatus.Failed)
+                    {
+                        Log.Information("Couldn't load from file. Exception message: {ExceptionMessage}", node.LoadedFromFileError.Message);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Assembly not attempted to be loaded, something went wrong.");
+                    }
+
+                    Log.Information("If this is an important reference, consider fixing this reference. Also make sure that you didn't omit it from the inputs.");
+
+                    var otherNodesInGroup = nodesByGroup[node.Identity.Group].Where(x => x != node && x.Loaded).ToList();
+                    if (otherNodesInGroup.Any())
+                    {
+                        Log.Information("Other versions of this assembly were loaded:");
+                        foreach (var otherVersionNode in otherNodesInGroup.OrderBy(x => x.Identity.Version))
+                        {
+                            Log.Information("{Version}", otherVersionNode.Identity.Version);
+                        }
+
+                        if (otherNodesInGroup.All(x => x.Identity.Version < node.Identity.Version))
+                        {
+                            Log.Warning("WARNING: This is the highest version of the assembly, yet it wasn't loaded. A downgrading binding redirect might be needed.");
+                        }
+                    }
+                }
+            }
+
+            var loadedNodesDifferentVersion = nodes.Where(x => x.Loaded && x.Name.FullName != x.Assembly.FullName).ToList();
+            if (loadedNodesDifferentVersion.Any())
+            {
+                Log.Information(Separator);
+                Log.Information("Assemblies that resolved a different version upon loading:");
+
+                foreach (var node in loadedNodesDifferentVersion)
+                {
+                    Log.Information(Separator);
+                    Log.Warning("Requested: {AssemblyName}", node.Name.FullName);
+                    Log.Warning("Resolved to: {AssemblyName}", node.Assembly.FullName);
+                }
+            }
+
+            var mainNodeDependants = graph.GetDirectDependants(mainNode).OrderBy(x => x.Identity.Group.ToString()).ThenBy(x => x.Identity.Version).ToList();
+            if (mainNodeDependants.Any())
+            {
+                Log.Information(Separator);
+                Log.Warning("WARNING: Detected that there are still some assemblies that depend on the main assembly. Try to avoid this scenario. Different binding redirects might be needed for them.");
+                foreach (var node in mainNodeDependants)
+                {
+                    Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Group, new[] { node }));
+                }
+            }
+
+            var otherLeafNodes = nodes.Where(x => x != mainNode && !graph.GetDirectDependants(x).Any()).ToList();
+            if (otherLeafNodes.Any())
+            {
+                Log.Information(Separator);
+                Log.Information("Other assemblies that don't have any dependants:");
+
+                foreach (var node in otherLeafNodes)
+                {
+                    Log.Warning("{AssemblyName}", node.Name.FullName);
+                }
+
+                Log.Information("If these assemblies relate to the main assembly dynamically, you can add them as a manual reference on input.");
+                Log.Information("If these are not loaded dynamically, they might also redundant.");
+            }
+
+            var nodesOutsideOfDependencyTree = nodes.Where(x => x != mainNode && !allMainDependencies.Contains(x)).ToList();
+            if (nodesOutsideOfDependencyTree.Any())
+            {
+                Log.Information(Separator);
+                Log.Information("All assemblies that aren't in any way connected to the main:");
+
+                foreach (var node in nodesOutsideOfDependencyTree)
+                {
+                    Log.Warning("{AssemblyName}", node.Name.FullName);
+                }
+            }
+
+            // TODO: generate binding redirects for main
+
             Log.Information(Separator);
             Log.Information("Run finished.");
         }
+
+        public static string GetSimpleName(AssemblyGroupIdentity groupIdentity, IList<AssemblyMNode> nodes)
+            => $"{groupIdentity.Name}"
+               + (
+                   nodes.Any(x => x.Identity.Version != VersionZero)
+                       ? " [" + string.Join(", ", nodes
+                             .Select(x => x.Identity.Version)
+                             .OrderBy(x => x)
+                             .Select(x => x.ToString())) + "]"
+                       : "");
 
         private static void ProcessNode(AssemblyNode node)
         {

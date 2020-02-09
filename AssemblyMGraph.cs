@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Serilog;
 
@@ -171,7 +172,7 @@ namespace BindingRedirectR
                 case AssemblyLoadStatus.Failed:
                     throw new InvalidOperationException("Cannot load assembly from file, previous attempt failed.");
             }
-            
+
             if (node.Loaded)
                 throw new InvalidOperationException("Cannot load assembly from file, it's already been loaded.");
 
@@ -212,6 +213,11 @@ namespace BindingRedirectR
             {
                 Log.Debug("Loading from name {AssemblyName}.", assemblyString);
                 var assembly = Assembly.ReflectionOnlyLoad(assemblyString);
+                if (assembly.GetName().FullName != node.Name.FullName)
+                {
+                    Log.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.GetName().FullName);
+                }
+
                 node.MarkAsLoadedFromName(assembly);
                 ProcessLoadedNode(node);
             }
@@ -249,7 +255,14 @@ namespace BindingRedirectR
 
             if (previousNodeByFile != null && previousNodeByFile != node)
             {
-                MergeNodeDependencies(node, previousNodeByFile);
+                if (previousNodeByFile.Identity != node.Identity)
+                {
+                    Log.Warning("There will be multiple nodes with the same file [{File}].", node.File.FullName);
+                }
+                else
+                {
+                    MergeNodeDependencies(node, previousNodeByFile);
+                }
             }
 
             // process dependencies
@@ -296,6 +309,7 @@ namespace BindingRedirectR
             {
                 foreach (var dependency in sourceNodeDependencies)
                 {
+                    DependantByNode[dependency].Remove(sourceNode);
                     RegisterDependency(targetNode, dependency);
                 }
             }
@@ -304,9 +318,60 @@ namespace BindingRedirectR
             {
                 foreach (var dependant in sourceNodeDependants)
                 {
+                    DependencyByNode[dependant].Remove(sourceNode);
                     RegisterDependency(dependant, targetNode);
                 }
             }
         }
+
+        public IEnumerable<AssemblyMNode> GetDirectDependants(AssemblyMNode dependency)
+            => DependantByNode.TryGetValue(dependency, out var result)
+                ? result
+                : Enumerable.Empty<AssemblyMNode>();
+
+        public IEnumerable<AssemblyMNode> GetDirectDependencies(AssemblyMNode dependant)
+            => DependencyByNode.TryGetValue(dependant, out var result)
+                ? result
+                : Enumerable.Empty<AssemblyMNode>();
+
+        public IEnumerable<AssemblyMNode> GetIndirectDependencies(AssemblyMNode dependant)
+        {
+            var results = new HashSet<AssemblyMNode>(GetAllDependencies(dependant));
+
+            // keep only indirect
+            results.ExceptWith(GetDirectDependencies(dependant));
+
+            return results;
+        }
+
+        public IEnumerable<AssemblyMNode> GetAllDependencies(AssemblyMNode dependant)
+        {
+            var results = new HashSet<AssemblyMNode>();
+            var directDependencies = GetDirectDependencies(dependant).ToList();
+
+            // collect both direct and indirect
+            var nodesToProcess = new HashSet<AssemblyMNode>(directDependencies);
+            var processedNodes = new HashSet<AssemblyMNode>();
+            while (nodesToProcess.Any())
+            {
+                var node = nodesToProcess.First();
+                if (!processedNodes.Contains(node))
+                {
+                    results.Add(node);
+                    foreach (var dependency in GetDirectDependencies(node))
+                    {
+                        nodesToProcess.Add(dependency);
+                    }
+
+                    processedNodes.Add(node);
+                }
+
+                nodesToProcess.Remove(node);
+            }
+
+            return results;
+        }
+
+        public IEnumerable<AssemblyMNode> GetAllNodes() => Nodes;
     }
 }

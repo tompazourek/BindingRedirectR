@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Xml.Linq;
 using Serilog;
 using static System.Console;
 
@@ -210,10 +212,77 @@ namespace BindingRedirectR
                 }
             }
 
-            // TODO: generate binding redirects for main
+            var dependenciesGrouped = allMainDependencies
+                .GroupBy(x => x.Identity.Group)
+                .Where(x => x.Count() > 1 && x.Any(y => y.Loaded))
+                .OrderBy(x => x.Key.ToString())
+                .ToList();
+
+            if (dependenciesGrouped.Any())
+            {
+                Log.Information(Separator);
+                Log.Information("Recommended binding redirects:");
+
+                foreach (var group in dependenciesGrouped)
+                {
+                    Log.Information(Separator);
+                    Log.Information("{AssemblyName}", group.Key.ToString());
+
+                    Log.Information("Versions:");
+                    foreach (var node in group.OrderBy(x => x.Identity.Version))
+                    {
+                        if (node.Loaded)
+                        {
+                            Log.Information("{Version} [Location=\"{Location}\"]", node.Identity.Version, node.File.FullName);
+                        }
+                        else
+                        {
+                            Log.Warning("{Version} [Not Found]", node.Identity.Version);
+                        }
+                    }
+
+                    Log.Information("Recommended redirect:");
+                    var highestVersion = group.Max(x => x.Identity.Version);
+                    var highestVersionLoaded = group.Where(x => x.Loaded).Max(x => x.Identity.Version);
+
+                    if (highestVersionLoaded < highestVersion)
+                    {
+                        Log.Warning("WARNING: Recommending a downgrading redirect.");
+                    }
+
+                    var element = GetAssemblyBindingXElement(group.Key, highestVersion, highestVersionLoaded);
+                    Log.Information("\n{Element}", element);
+                }
+            }
+            else
+            {
+                Log.Information(Separator);
+                Log.Information("No recommended binding redirects.");
+            }
 
             Log.Information(Separator);
             Log.Information("Run finished.");
+        }
+
+        public static XElement GetAssemblyBindingXElement(AssemblyGroupIdentity groupIdentity, Version highestOldVersion, Version newVersion)
+        {
+            XNamespace ns = "urn:schemas-microsoft-com:asm.v1";
+            var assemblyBindingElement = new XElement(ns + "assemblyBinding");
+            var dependentAssemlyElement = new XElement(ns + "dependentAssembly");
+            
+            var assemblyIdentityElement = new XElement(ns + "assemblyIdentity");
+            assemblyIdentityElement.Add(new XAttribute("name", groupIdentity.Name));
+            assemblyIdentityElement.Add(new XAttribute("publicKeyToken", groupIdentity.PublicKeyToken));
+            assemblyIdentityElement.Add(new XAttribute("culture", groupIdentity.Culture));
+            dependentAssemlyElement.Add(assemblyIdentityElement);
+
+            var bindingRedirectElement = new XElement(ns + "bindingRedirect");
+            bindingRedirectElement.Add(new XAttribute("oldVersion", $"{VersionZero}-{highestOldVersion}"));
+            bindingRedirectElement.Add(new XAttribute("newVersion", $"{newVersion}"));
+            dependentAssemlyElement.Add(bindingRedirectElement);
+
+            assemblyBindingElement.Add(dependentAssemlyElement);
+            return assemblyBindingElement;
         }
 
         public static string GetSimpleName(AssemblyGroupIdentity groupIdentity, IList<AssemblyMNode> nodes)
@@ -226,7 +295,7 @@ namespace BindingRedirectR
                              .Select(x => x.ToString())) + "]"
                        : "");
 
-        private static void ProcessNode(AssemblyNode node)
+        public static void ProcessNode(AssemblyNode node)
         {
             Log.Information(Separator);
             Log.Information(Separator);

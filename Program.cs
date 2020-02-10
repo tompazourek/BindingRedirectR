@@ -88,7 +88,7 @@ namespace BindingRedirectR
             graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly);
 
             // register additional dependencies
-            foreach (var additionalDependency in inputParameters.AdditionalDependencies)
+            foreach (var additionalDependency in inputParameters.AdditionalDependencies ?? Enumerable.Empty<InputParameters.ManualDependency>())
             {
                 var dependant = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependant);
                 var dependency = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependency);
@@ -250,6 +250,8 @@ namespace BindingRedirectR
                 foreach (var node in mainNodeDependants)
                 {
                     Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
+                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                    Log.Information("");
                 }
             }
         }
@@ -287,11 +289,14 @@ namespace BindingRedirectR
                     if (node.Name != null)
                     {
                         Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
+                        Log.Information("-- {AssemblyIdentity}", node.Identity);
                     }
                     else
                     {
                         Log.Information("{File}", node.File.FullName);
                     }
+
+                    Log.Information("");
 
                     if (node.LoadedFromName == AssemblyLoadStatus.Failed)
                     {
@@ -330,10 +335,17 @@ namespace BindingRedirectR
         {
             Log.Information(Separator);
             Log.Information("All dependencies:");
+            Log.Information("");
+
             allMainDependencies = graph.GetAllDependencies(mainNode).ToHashSet();
             foreach (var dependencyGroup in allMainDependencies.GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
                 Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                foreach (var node in dependencyGroup)
+                {
+                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                }
+                Log.Information("");
             }
         }
 
@@ -341,9 +353,16 @@ namespace BindingRedirectR
         {
             Log.Information(Separator);
             Log.Information("Indirect dependencies:");
+            Log.Information("");
+
             foreach (var dependencyGroup in graph.GetIndirectDependencies(mainNode).GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
                 Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                foreach (var node in dependencyGroup)
+                {
+                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                }
+                Log.Information("");
             }
         }
 
@@ -351,9 +370,16 @@ namespace BindingRedirectR
         {
             Log.Information(Separator);
             Log.Information("Direct dependencies:");
+            Log.Information("");
+
             foreach (var dependencyGroup in graph.GetDirectDependencies(mainNode).GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
                 Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                foreach (var node in dependencyGroup)
+                {
+                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                }
+                Log.Information("");
             }
         }
 

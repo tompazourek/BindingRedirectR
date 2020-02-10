@@ -1,6 +1,6 @@
 # BindingRedirectR
 
-A tool to examine binding redirects, proof of concept (pre-alpha).
+A tool to analyse assembly dependencies, possibly generate binding redirects. It's only a proof of concept (pre-alpha) at this stage.
 
 ## Run
 

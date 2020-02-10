@@ -127,6 +127,7 @@ namespace BindingRedirectR
             {
                 Log.Information(Separator);
                 Log.Information("Recommended binding redirects:");
+                var dependentAssemblyTriples = new List<(AssemblyUnversionedIdentity Key, Version highestVersion, Version highestVersionLoaded)>();
 
                 foreach (var group in dependenciesGrouped)
                 {
@@ -155,7 +156,17 @@ namespace BindingRedirectR
                         Log.Warning("WARNING: Recommending a downgrading redirect.");
                     }
 
-                    var element = GetAssemblyBindingXElement(group.Key, highestVersion, highestVersionLoaded);
+                    var dependentAssemblyTriple = (group.Key, highestVersion, highestVersionLoaded);
+                    var element = GetAssemblyBindingXElement(dependentAssemblyTriple);
+                    Log.Information("\n{Element}", element);
+                    dependentAssemblyTriples.Add(dependentAssemblyTriple);
+                }
+
+                if (dependenciesGrouped.Count > 1)
+                {
+                    Log.Information(Separator);
+                    Log.Information("Collected binding redirects:");
+                    var element = GetAssemblyBindingXElement(dependentAssemblyTriples.ToArray());
                     Log.Information("\n{Element}", element);
                 }
             }
@@ -322,11 +333,25 @@ namespace BindingRedirectR
 
         private static readonly string Separator = new string('-', 20);
         private static readonly Version VersionZero = new Version(0, 0, 0, 0);
+        private static readonly XNamespace AsmV1XNamespace = "urn:schemas-microsoft-com:asm.v1";
 
-        public static XElement GetAssemblyBindingXElement(AssemblyUnversionedIdentity unversionedIdentity, Version highestOldVersion, Version newVersion)
+        public static XElement GetAssemblyBindingXElement(params (AssemblyUnversionedIdentity unversionedIdentity, Version highestOldVersion, Version newVersion)[] dependentAssemblies)
         {
-            XNamespace ns = "urn:schemas-microsoft-com:asm.v1";
+            var ns = AsmV1XNamespace;
             var assemblyBindingElement = new XElement(ns + "assemblyBinding");
+
+            foreach (var dependentAssembly in dependentAssemblies)
+            {
+                var dependentAssemlyElement = GetDependentAssemblyXElement(dependentAssembly.unversionedIdentity, dependentAssembly.highestOldVersion, dependentAssembly.newVersion);
+                assemblyBindingElement.Add(dependentAssemlyElement);    
+            }
+            
+            return assemblyBindingElement;
+        }
+
+        private static XElement GetDependentAssemblyXElement(AssemblyUnversionedIdentity unversionedIdentity, Version highestOldVersion, Version newVersion)
+        {
+            var ns = AsmV1XNamespace;
             var dependentAssemlyElement = new XElement(ns + "dependentAssembly");
 
             var assemblyIdentityElement = new XElement(ns + "assemblyIdentity");
@@ -339,9 +364,7 @@ namespace BindingRedirectR
             bindingRedirectElement.Add(new XAttribute("oldVersion", $"{VersionZero}-{highestOldVersion}"));
             bindingRedirectElement.Add(new XAttribute("newVersion", $"{newVersion}"));
             dependentAssemlyElement.Add(bindingRedirectElement);
-
-            assemblyBindingElement.Add(dependentAssemlyElement);
-            return assemblyBindingElement;
+            return dependentAssemlyElement;
         }
 
         public static string GetSimpleName(AssemblyUnversionedIdentity unversionedIdentity, IList<AssemblyDependencyNode> nodes)

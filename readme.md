@@ -1,6 +1,6 @@
 # BindingRedirectR
 
-A tool to examine binding redirects.
+A tool to examine binding redirects, proof of concept (pre-alpha).
 
 ## Run
 
@@ -10,7 +10,7 @@ To run, execute in command line:
 BindingRedirectR.exe input.json
 ```
 
-The output will be in: `input.json.log` file in the same folder.
+The generated report will be in: `input.json.log` file in the same folder.
 
 The `input.json` file looks something like this:
 
@@ -32,4 +32,4 @@ The `input.json` file looks something like this:
 }
 ```
 
-The strings can be either file paths or fully qualified assembly names.
+The assemnly strings can be either file paths or fully qualified assembly names.

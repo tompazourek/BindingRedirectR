@@ -10,7 +10,7 @@ namespace BindingRedirectR
         private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
 
         public AssemblySpecificIdentity Identity { get; private set; }
-        public Assembly Assembly { get; private set; }
+        public AssemblyMInfo Assembly { get; private set; }
 
         public AssemblyName Name { get; private set; }
         public AssemblyLoadStatus LoadedFromName { get; private set; }
@@ -44,7 +44,7 @@ namespace BindingRedirectR
             };
         }
 
-        public void MarkAsLoadedFromFile(Assembly assembly)
+        public void MarkAsLoadedFromFile(AssemblyMInfo assembly)
         {
             switch (LoadedFromFile)
             {
@@ -65,7 +65,7 @@ namespace BindingRedirectR
 
             LoadedFromFile = AssemblyLoadStatus.Loaded;
             Assembly = assembly;
-            Name = assembly.GetName();
+            Name = new AssemblyName(assembly.AssemblyName);
             Identity = new AssemblySpecificIdentity(Name);
             Loaded = true;
         }
@@ -93,7 +93,7 @@ namespace BindingRedirectR
             LoadedFromFileError = exception;
         }
 
-        public void MarkAsLoadedFromName(Assembly assembly)
+        public void MarkAsLoadedFromName(AssemblyMInfo assembly)
         {
             switch (LoadedFromName)
             {

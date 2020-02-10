@@ -180,7 +180,7 @@ namespace BindingRedirectR
             try
             {
                 Log.Debug("Loading from file {File}.", fileFullName);
-                var assembly = Assembly.ReflectionOnlyLoadFrom(fileFullName);
+                var assembly = AssemblyMLoader.ReflectionOnlyLoadFrom(fileFullName);
                 node.MarkAsLoadedFromFile(assembly);
                 ProcessLoadedNode(node);
             }
@@ -212,10 +212,10 @@ namespace BindingRedirectR
             try
             {
                 Log.Debug("Loading from name {AssemblyName}.", assemblyString);
-                var assembly = Assembly.ReflectionOnlyLoad(assemblyString);
-                if (assembly.GetName().FullName != node.Name.FullName)
+                var assembly = AssemblyMLoader.ReflectionOnlyLoad(node.Name);
+                if (assembly.AssemblyName != node.Name.FullName)
                 {
-                    Log.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.GetName().FullName);
+                    Log.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.AssemblyName);
                 }
 
                 node.MarkAsLoadedFromName(assembly);
@@ -271,9 +271,9 @@ namespace BindingRedirectR
 
         private void RegisterNodeDependencies(AssemblyMNode dependant)
         {
-            foreach (var dependencyName in dependant.Assembly.GetReferencedAssemblies())
+            foreach (var dependencyName in dependant.Assembly.ReferenceAssemblyNames)
             {
-                var dependency = EnsureNodeWithName(dependencyName);
+                var dependency = EnsureNodeWithName(new AssemblyName(dependencyName));
                 RegisterDependency(dependant, dependency);
             }
         }

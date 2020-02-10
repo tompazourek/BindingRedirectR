@@ -158,7 +158,7 @@ namespace BindingRedirectR
                 }
             }
 
-            var loadedNodesDifferentVersion = nodes.Where(x => x.Loaded && x.Name.FullName != x.Assembly.FullName).ToList();
+            var loadedNodesDifferentVersion = nodes.Where(x => x.Loaded && x.Name.FullName != x.Assembly.AssemblyName).ToList();
             if (loadedNodesDifferentVersion.Any())
             {
                 Log.Information(Separator);
@@ -168,7 +168,7 @@ namespace BindingRedirectR
                 {
                     Log.Information(Separator);
                     Log.Warning("Requested: {AssemblyName}", node.Name.FullName);
-                    Log.Warning("Resolved to: {AssemblyName}", node.Assembly.FullName);
+                    Log.Warning("Resolved to: {AssemblyName}", node.Assembly.AssemblyName);
                 }
             }
 

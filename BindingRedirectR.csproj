@@ -53,6 +53,8 @@
     <Compile Include="AssemblyGroupIdentity.cs" />
     <Compile Include="AssemblyLoadStatus.cs" />
     <Compile Include="AssemblyMGraph.cs" />
+    <Compile Include="AssemblyMInfo.cs" />
+    <Compile Include="AssemblyMLoader.cs" />
     <Compile Include="AssemblyMNode.cs" />
     <Compile Include="AssemblyNode.cs" />
     <Compile Include="AssemblyNodeExtensions.cs" />

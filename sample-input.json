@@ -1,21 +1,4 @@
-# BindingRedirectR
-
-A tool to examine binding redirects.
-
-## Run
-
-To run, execute in command line:
-
-```
-BindingRedirectR.exe input.json
-```
-
-The output will be in: `input.json.log` file in the same folder.
-
-The `input.json` file looks something like this:
-
-```
-{
+﻿{
   "mainAssembly": "BindingRedirectR.exe",
   "assemblies": [
     "Serilog.dll",
@@ -30,6 +13,3 @@ The `input.json` file looks something like this:
     }
   ]
 }
-```
-
-The strings can be either file paths or fully qualified assembly names.

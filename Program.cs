@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using Newtonsoft.Json;
 using Serilog;
 using static System.Console;
 
@@ -11,30 +14,57 @@ namespace BindingRedirectR
     {
         #region Init
 
-        private static readonly ILogger Log = (Serilog.Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Verbose()
-                .WriteTo.Console()
-                .CreateLogger())
-            .ForContext<Program>();
+        private static ILogger Log;
 
-        private static void Main()
+        private static void Main(string[] args)
         {
+            // parse input parameter
+            var inputJsonPath = args?.Length > 0 ? args[0] : null;
+            inputJsonPath = string.IsNullOrWhiteSpace(inputJsonPath) ? null : inputJsonPath;
+            inputJsonPath = inputJsonPath ?? "sample-input.json";
+            inputJsonPath = Path.GetFullPath(inputJsonPath);
+            
+            // clear log file initially
+            var outputLogPath = $"{inputJsonPath}.log";
+            File.Delete(outputLogPath);
+            
+            // set up logging
+            Log = (Serilog.Log.Logger = new LoggerConfiguration()
+                    .MinimumLevel.Verbose()
+                    .WriteTo.Console()
+                    .WriteTo.File(outputLogPath)
+                    .CreateLogger())
+                .ForContext<Program>();
+            
+            // set up unhandled exceptions
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 Log.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
-                Log.Information("Press any key to exit.");
-                Serilog.Log.CloseAndFlush();
-                ReadKey();
+                ExitWithKeyPress();
                 Environment.Exit(1);
             };
 
-            var inputParameters = SampleInputs.Foo;
+            // parse inputs
+            Log.Information("Input file: {File}", inputJsonPath);
+            Log.Information("Output log: {File}", outputLogPath);
+            Log.Information(Separator);
+            var inputParameters = JsonConvert.DeserializeObject<InputParameters>(File.ReadAllText(inputJsonPath));
+
+            // run
             Run(inputParameters);
 
-            Log.Information(Separator);
-            Log.Information("Press any key to exit.");
-            Serilog.Log.CloseAndFlush();
+            ExitWithKeyPress();
             ReadKey();
+        }
+
+        private static void ExitWithKeyPress()
+        {
+            if (Debugger.IsAttached)
+            {
+                Log.Information("Press any key to exit.");
+                ReadKey();
+            }
+            Serilog.Log.CloseAndFlush();
         }
 
         #endregion
@@ -49,19 +79,19 @@ namespace BindingRedirectR
             var graph = new AssemblyDependencyGraph();
 
             // register assembly sources
-            foreach (var assemblySource in inputParameters.AssemblySources)
+            foreach (var assemblySource in inputParameters.Assemblies)
             {
                 graph.EnsureNodeWithAssemblySource(assemblySource);
             }
 
             // register main assembly
-            graph.EnsureNodeWithAssemblySource(inputParameters.MainAssemblySource);
+            graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly);
 
-            // register manual references
-            foreach (var (dependantSource, dependencySource) in inputParameters.ManualReferences)
+            // register additional dependencies
+            foreach (var additionalDependency in inputParameters.AdditionalDependencies)
             {
-                var dependant = graph.EnsureNodeWithAssemblySource(dependantSource);
-                var dependency = graph.EnsureNodeWithAssemblySource(dependencySource);
+                var dependant = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependant);
+                var dependency = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependency);
                 graph.RegisterDependency(dependant, dependency);
             }
 
@@ -81,7 +111,7 @@ namespace BindingRedirectR
             Log.Information("Entire graph processed.");
 
             // locate the main assembly
-            var mainNode = graph.EnsureNodeWithAssemblySource(inputParameters.MainAssemblySource);
+            var mainNode = graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly);
 
             // write report
             WriteReport(mainNode, graph);

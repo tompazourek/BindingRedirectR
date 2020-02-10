@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Serilog;
 
 namespace BindingRedirectR
@@ -198,6 +199,13 @@ namespace BindingRedirectR
         {
             try
             {
+                var regex = new Regex(".*, Version=.*, Culture=.*, PublicKeyToken=.*", RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                if (!regex.IsMatch(assemblyString))
+                {
+                    name = null;
+                    return false;
+                }
+
                 name = new AssemblyName(assemblyString);
                 return true;
             }

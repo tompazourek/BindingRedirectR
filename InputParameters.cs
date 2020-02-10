@@ -1,35 +1,30 @@
-﻿using System;
+﻿using System.Collections.Generic;
 
 namespace BindingRedirectR
 {
     public class InputParameters
     {
         /// <summary>
-        /// File path to the main assembly to analyze (entry assembly). Can also be an "assembly string".
+        /// Main assembly for which to consider the dependency tree.
+        /// Either a file path, or a fully qualified assembly name.
         /// </summary>
-        public string MainAssemblySource { get; }
+        public string MainAssembly { get; set; }
 
         /// <summary>
-        /// File paths to process. Can also be an "assembly string" to load the assembly from GAC.
-        /// The <see cref="MainAssemblySource" /> can be included here or not, doesn't matter.
+        /// All assemblies to load.
+        /// Either a file path, or a fully qualified assembly name.
         /// </summary>
-        public string[] AssemblySources { get; }
+        public IList<string> Assemblies { get; set; }
 
         /// <summary>
-        /// Additional references that aren't in the assemblies, but we want to use.
+        /// Additional dependencies that aren't detected in the assemblies manifest, but we want to consider.
         /// </summary>
-        public (string dependantSource, string dependencySource)[] ManualReferences { get; }
-
-        public InputParameters
-        (
-            string[] assemblySources,
-            string mainAssemblySource,
-            (string dependantSource, string dependencySource)[] manualReferences
-        )
+        public IList<ManualDependency> AdditionalDependencies { get; } = new List<ManualDependency>();
+        
+        public class ManualDependency
         {
-            AssemblySources = assemblySources ?? throw new ArgumentNullException(nameof(assemblySources));
-            MainAssemblySource = mainAssemblySource ?? throw new ArgumentNullException(nameof(mainAssemblySource));
-            ManualReferences = manualReferences ?? throw new ArgumentNullException(nameof(manualReferences));
+            public string Dependant { get; set; }
+            public string Dependency { get; set; }
         }
     }
 }

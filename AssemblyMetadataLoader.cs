@@ -4,23 +4,23 @@ using System.Reflection;
 
 namespace BindingRedirectR
 {
-    internal static class AssemblyMLoader
+    internal static class AssemblyMetadataLoader
     {
-        public static AssemblyMInfo ReflectionOnlyLoadFrom(string path)
+        public static AssemblyMetadata ReflectionOnlyLoadFrom(string path)
         {
             using (var tempAppDomain = new TempAppDomain())
             {
-                var assembly = tempAppDomain.ReflectionOnlyLoadFrom(path);
-                return assembly;
+                var assemblyMetadata = tempAppDomain.ReflectionOnlyLoadFrom(path);
+                return assemblyMetadata;
             }
         }
 
-        public static AssemblyMInfo ReflectionOnlyLoad(AssemblyName name)
+        public static AssemblyMetadata ReflectionOnlyLoad(AssemblyName name)
         {
             using (var tempAppDomain = new TempAppDomain())
             {
-                var assembly = tempAppDomain.ReflectionOnlyLoad(name.FullName);
-                return assembly;
+                var assemblyMetadata = tempAppDomain.ReflectionOnlyLoad(name.FullName);
+                return assemblyMetadata;
             }
         }
 
@@ -56,10 +56,10 @@ namespace BindingRedirectR
             }
 
             // ReSharper disable once MemberHidesStaticFromOuterClass
-            public AssemblyMInfo ReflectionOnlyLoadFrom(string path)
+            public AssemblyMetadata ReflectionOnlyLoadFrom(string path)
                 => _loaderProxy.ReflectionOnlyLoadFrom(path);
 
-            public AssemblyMInfo ReflectionOnlyLoad(string assemblyName)
+            public AssemblyMetadata ReflectionOnlyLoad(string assemblyName)
                 => _loaderProxy.ReflectionOnlyLoad(assemblyName);
 
             public void Dispose()
@@ -71,18 +71,18 @@ namespace BindingRedirectR
         private class AssemblyLoaderProxy : MarshalByRefObject
         {
             // ReSharper disable once MemberHidesStaticFromOuterClass
-            public AssemblyMInfo ReflectionOnlyLoadFrom(string path)
+            public AssemblyMetadata ReflectionOnlyLoadFrom(string path)
             {
                 var assembly = Assembly.ReflectionOnlyLoadFrom(path);
-                var result = new AssemblyMInfo(assembly);
-                return result;
+                var assemblyMetadata = new AssemblyMetadata(assembly);
+                return assemblyMetadata;
             }
 
-            public AssemblyMInfo ReflectionOnlyLoad(string assemblyName)
+            public AssemblyMetadata ReflectionOnlyLoad(string assemblyName)
             {
                 var assembly = Assembly.ReflectionOnlyLoad(assemblyName);
-                var result = new AssemblyMInfo(assembly);
-                return result;
+                var assemblyMetadata = new AssemblyMetadata(assembly);
+                return assemblyMetadata;
             }
         }
     }

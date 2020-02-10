@@ -11,7 +11,7 @@ namespace BindingRedirectR
 
         /// <summary>
         /// File paths to process. Can also be an "assembly string" to load the assembly from GAC.
-        /// The <see cref="MainAssemblySource"/> can be included here or not, doesn't matter.
+        /// The <see cref="MainAssemblySource" /> can be included here or not, doesn't matter.
         /// </summary>
         public string[] AssemblySources { get; }
 

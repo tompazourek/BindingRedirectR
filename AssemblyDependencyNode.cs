@@ -5,12 +5,12 @@ using Serilog;
 
 namespace BindingRedirectR
 {
-    internal class AssemblyMNode
+    internal class AssemblyDependencyNode
     {
         private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
 
-        public AssemblySpecificIdentity Identity { get; private set; }
-        public AssemblyMInfo Assembly { get; private set; }
+        public AssemblyVersionedIdentity Identity { get; private set; }
+        public AssemblyMetadata Assembly { get; private set; }
 
         public AssemblyName Name { get; private set; }
         public AssemblyLoadStatus LoadedFromName { get; private set; }
@@ -22,29 +22,29 @@ namespace BindingRedirectR
 
         public bool Loaded { get; private set; }
 
-        public static AssemblyMNode CreateFromName(AssemblyName assemblyName)
+        public static AssemblyDependencyNode CreateFromName(AssemblyName assemblyName)
         {
             if (assemblyName == null) throw new ArgumentNullException(nameof(assemblyName));
             Log.Debug("Creating node from name {AssemblyName}.", assemblyName);
-            return new AssemblyMNode
+            return new AssemblyDependencyNode
             {
                 Name = assemblyName,
-                Identity = new AssemblySpecificIdentity(assemblyName),
+                Identity = new AssemblyVersionedIdentity(assemblyName),
             };
         }
 
-        public static AssemblyMNode CreateFromFile(FileInfo file)
+        public static AssemblyDependencyNode CreateFromFile(FileInfo file)
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
             Log.Debug("Creating node from file {File}.", file.FullName);
-            return new AssemblyMNode
+            return new AssemblyDependencyNode
             {
                 File = file,
                 // we don't have identity until we attempt to load
             };
         }
 
-        public void MarkAsLoadedFromFile(AssemblyMInfo assembly)
+        public void MarkAsLoadedFromFile(AssemblyMetadata assembly)
         {
             switch (LoadedFromFile)
             {
@@ -66,7 +66,7 @@ namespace BindingRedirectR
             LoadedFromFile = AssemblyLoadStatus.Loaded;
             Assembly = assembly;
             Name = new AssemblyName(assembly.AssemblyName);
-            Identity = new AssemblySpecificIdentity(Name);
+            Identity = new AssemblyVersionedIdentity(Name);
             Loaded = true;
         }
 
@@ -93,7 +93,7 @@ namespace BindingRedirectR
             LoadedFromFileError = exception;
         }
 
-        public void MarkAsLoadedFromName(AssemblyMInfo assembly)
+        public void MarkAsLoadedFromName(AssemblyMetadata assembly)
         {
             switch (LoadedFromName)
             {
@@ -143,16 +143,16 @@ namespace BindingRedirectR
 
         public override string ToString()
         {
-            if (!Loaded)
-            {
-                if (File != null)
-                    return $"[not loaded] {File.FullName}";
-                if (Name != null)
-                    return $"[not loaded] {Name.FullName}";
-                return "[not loaded] (unknown)"; // shouldn't happen
-            }
+            if (Loaded)
+                return Identity.ToString();
 
-            return Identity.ToString();
+            if (File != null)
+                return $"[not loaded] {File.FullName}";
+
+            if (Name != null)
+                return $"[not loaded] {Name.FullName}";
+
+            return "[not loaded] (unknown)"; // shouldn't happen
         }
     }
 }

@@ -49,25 +49,22 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AssemblyEdge.cs" />
-    <Compile Include="AssemblyGroupIdentity.cs" />
+    <Compile Include="AssemblyUnversionedIdentity.cs" />
     <Compile Include="AssemblyLoadStatus.cs" />
-    <Compile Include="AssemblyMGraph.cs" />
-    <Compile Include="AssemblyMInfo.cs" />
-    <Compile Include="AssemblyMLoader.cs" />
-    <Compile Include="AssemblyMNode.cs" />
-    <Compile Include="AssemblyNode.cs" />
-    <Compile Include="AssemblyNodeExtensions.cs" />
-    <Compile Include="AssemblyPathVersion.cs" />
-    <Compile Include="AssemblySpecificIdentity.cs" />
+    <Compile Include="AssemblyDependencyGraph.cs" />
+    <Compile Include="AssemblyMetadata.cs" />
+    <Compile Include="AssemblyMetadataLoader.cs" />
+    <Compile Include="AssemblyDependencyNode.cs" />
+    <Compile Include="AssemblyVersionedIdentity.cs" />
     <Compile Include="InputParameters.cs" />
     <Compile Include="Program.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SampleInputs.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Properties\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -34,4 +34,30 @@ The `input.json` file looks something like this:
 }
 ```
 
-The assembly strings can be either file paths, file globbing patterns, or fully qualified assembly names.
+The assembly strings can be either **file paths**, **file globbing patterns**, or **fully qualified assembly names**.
+
+---
+
+Another example input:
+
+```
+{
+  "baseDirectory": "C:\\dev\\my-app-repo\\src\\MyApp\\bin",
+  "mainAssembly": "MyApp.dll",
+  "assemblies": [
+    "*.dll"
+  ],
+  "additionalDependencies": [
+    {
+      "comment": "Dynamic reference through Web.config",
+      "dependant": "MyApp.dll",
+      "dependencies": [ "Microsoft.CodeDom.Providers.DotNetCompilerPlatform.dll" ]
+    },
+    {
+      "comment": "Referece missing, but it's needed",
+      "dependant": "System.Web.WebPages.dll",
+      "dependencies": [ "System.Web.Helpers.dll" ]
+    }
+  ]
+}
+```

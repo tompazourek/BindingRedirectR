@@ -135,10 +135,26 @@ namespace BindingRedirectR
                 ? result
                 : Enumerable.Empty<AssemblyDependencyNode>();
 
+        public IEnumerable<AssemblyDependencyNode> GetDirectDependantsByGroup(AssemblyUnversionedIdentity dependencyGroup) 
+            => _nodes
+                .Where(x => x.Identity.Unversioned == dependencyGroup)
+                .SelectMany(GetDirectDependants)
+                .Distinct();
+
         public IEnumerable<AssemblyDependencyNode> GetDirectDependencies(AssemblyDependencyNode dependant)
             => _dependencyByNode.TryGetValue(dependant, out var result)
                 ? result
                 : Enumerable.Empty<AssemblyDependencyNode>();
+
+        public IEnumerable<AssemblyDependencyNode> GetIndirectDependants(AssemblyDependencyNode dependency)
+        {
+            var results = new HashSet<AssemblyDependencyNode>(GetAllDependants(dependency));
+
+            // keep only indirect
+            results.ExceptWith(GetDirectDependants(dependency));
+
+            return results;
+        }
 
         public IEnumerable<AssemblyDependencyNode> GetIndirectDependencies(AssemblyDependencyNode dependant)
         {
@@ -146,6 +162,34 @@ namespace BindingRedirectR
 
             // keep only indirect
             results.ExceptWith(GetDirectDependencies(dependant));
+
+            return results;
+        }
+        
+        public IEnumerable<AssemblyDependencyNode> GetAllDependants(AssemblyDependencyNode dependency)
+        {
+            var results = new HashSet<AssemblyDependencyNode>();
+            var directDependants = GetDirectDependants(dependency).ToList();
+
+            // collect both direct and indirect
+            var nodesToProcess = new HashSet<AssemblyDependencyNode>(directDependants);
+            var processedNodes = new HashSet<AssemblyDependencyNode>();
+            while (nodesToProcess.Any())
+            {
+                var node = nodesToProcess.First();
+                if (!processedNodes.Contains(node))
+                {
+                    results.Add(node);
+                    foreach (var dependant in GetDirectDependants(node))
+                    {
+                        nodesToProcess.Add(dependant);
+                    }
+
+                    processedNodes.Add(node);
+                }
+
+                nodesToProcess.Remove(node);
+            }
 
             return results;
         }
@@ -176,6 +220,14 @@ namespace BindingRedirectR
             }
 
             return results;
+        }
+
+        public IList<AssemblyDependencyNode> GetAllDependenciesIncludingEntireGroup(AssemblyDependencyNode dependant)
+        {
+            var allDependencies = GetAllDependencies(dependant);
+            var allDependencyGroups = allDependencies.Select(x => x.Identity.Unversioned).ToHashSet();
+            var allNodesByGroups = GetAllNodes().Where(x => allDependencyGroups.Contains(x.Identity.Unversioned)).ToList();
+            return allNodesByGroups;
         }
 
         public IEnumerable<AssemblyDependencyNode> GetAllNodes() => _nodes;

@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using Newtonsoft.Json;
 using Serilog;
-using static System.Console;
 
 namespace BindingRedirectR
 {
@@ -127,21 +125,23 @@ namespace BindingRedirectR
 
             WriteDirectDependencies(mainNode, graph);
             WriteIndirectDependencies(mainNode, graph);
-            WriteAllDependencies(mainNode, graph, out var allMainDependencies);
+            WriteAllDependencies(mainNode, graph);
 
             var nodes = graph.GetAllNodes()
                 .OrderBy(x => x.Identity)
                 .ToList();
 
-            WriteAssembliesNotLoaded(nodes);
+            WriteAssembliesNotLoaded(nodes, graph);
             WriteAssembliesRedirectedUponLoad(nodes);
             WriteMainNodeDependants(mainNode, graph);
             WriteOtherLeafNodes(mainNode, graph, nodes);
-            WriteNodesOutsideMainDependencyTree(mainNode, nodes, allMainDependencies);
-            WriteBindingRedirects(allMainDependencies);
+
+            var allMainDependenciesIncludingEntireGroup = graph.GetAllDependenciesIncludingEntireGroup(mainNode);
+            WriteNodesOutsideMainDependencyTree(mainNode, nodes, allMainDependenciesIncludingEntireGroup, graph);
+            WriteBindingRedirects(allMainDependenciesIncludingEntireGroup);
         }
 
-        private static void WriteBindingRedirects(HashSet<AssemblyDependencyNode> allMainDependencies)
+        private static void WriteBindingRedirects(IList<AssemblyDependencyNode> allMainDependencies)
         {
             var dependenciesGrouped = allMainDependencies
                 .GroupBy(x => x.Identity.Unversioned)
@@ -203,24 +203,60 @@ namespace BindingRedirectR
             }
         }
 
-        private static void WriteNodesOutsideMainDependencyTree(AssemblyDependencyNode mainNode, List<AssemblyDependencyNode> nodes, HashSet<AssemblyDependencyNode> allMainDependencies)
+        private static void WriteNodesOutsideMainDependencyTree(AssemblyDependencyNode mainNode, List<AssemblyDependencyNode> nodes, IList<AssemblyDependencyNode> allMainDependencies, AssemblyDependencyGraph graph)
         {
-            var nodesOutsideOfDependencyTree = nodes.Where(x => x != mainNode && !allMainDependencies.Contains(x)).ToList();
+            var nodesOutsideOfDependencyTree = nodes
+                .Where(x => x != mainNode && !allMainDependencies.Contains(x))
+                .Where(x => x.Loaded)
+                .ToList();
+
             if (nodesOutsideOfDependencyTree.Any())
             {
                 Logger.Information(Separator);
-                Logger.Information("All assemblies that aren't in any way connected to the main:");
+                Logger.Information("All assemblies that aren't in any way connected to the main, but were loaded:");
 
                 foreach (var node in nodesOutsideOfDependencyTree)
                 {
-                    Logger.Warning("{AssemblyName}", node.Name.FullName);
+                    Logger.Information(Separator);
+                    Logger.Warning("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
+                    Logger.Information("-- {AssemblyIdentity}", node.Identity);
+
+                    Logger.Information("");
+                    
+                    var directDependants = graph.GetDirectDependants(node).ToList();
+                    if (directDependants.Any())
+                    {
+                        Logger.Information("Nodes that depend on this assembly directly:");
+                        foreach (var dependant in directDependants)
+                        {
+                            Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependant.Identity.Unversioned, new[] { dependant }));
+                            Logger.Information("-- {AssemblyIdentity}", dependant.Identity);
+                            Logger.Information("");
+                        }
+
+                        var indirectDependants = graph.GetIndirectDependants(node).ToList();
+                        if (indirectDependants.Any())
+                        {
+                            Logger.Information("Nodes that depend on this assembly indirectly:");
+                            foreach (var dependant in indirectDependants)
+                            {
+                                Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependant.Identity.Unversioned, new[] { dependant }));
+                                Logger.Information("-- {AssemblyIdentity}", dependant.Identity);
+                                Logger.Information("");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Logger.Information("No nodes that depend on this were found.");
+                    }
                 }
             }
         }
 
         private static void WriteOtherLeafNodes(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph, List<AssemblyDependencyNode> nodes)
         {
-            var otherLeafNodes = nodes.Where(x => x != mainNode && !graph.GetDirectDependants(x).Any()).ToList();
+            var otherLeafNodes = nodes.Where(x => x != mainNode && !graph.GetDirectDependantsByGroup(x.Identity.Unversioned).Any()).ToList();
             if (otherLeafNodes.Any())
             {
                 Logger.Information(Separator);
@@ -231,7 +267,7 @@ namespace BindingRedirectR
                     Logger.Warning("{AssemblyName}", node.Name.FullName);
                 }
 
-                Logger.Information("If these assemblies relate to the main assembly dynamically, you can add them as a manual reference on input.");
+                Logger.Information("If these assemblies relate to some assembly dynamically, you can add them as an additional dependency on input.");
                 Logger.Information("If these are not loaded dynamically, they might also redundant.");
             }
         }
@@ -269,7 +305,7 @@ namespace BindingRedirectR
             }
         }
 
-        private static void WriteAssembliesNotLoaded(List<AssemblyDependencyNode> nodes)
+        private static void WriteAssembliesNotLoaded(List<AssemblyDependencyNode> nodes, AssemblyDependencyGraph graph)
         {
             var nodesByGroup = nodes.ToLookup(x => x.Identity.Unversioned);
             var nodesNotLoaded = nodes.Where(node => !node.Loaded).ToList();
@@ -296,15 +332,47 @@ namespace BindingRedirectR
 
                     if (node.LoadedFromName == AssemblyLoadStatus.Failed)
                     {
-                        Logger.Information("Couldn't load from assembly name. Exception message: {ExceptionMessage}", node.LoadedFromNameError.Message);
+                        Logger.Information("Couldn't load from assembly name. Exception message:");
+                        Logger.Information(node.LoadedFromNameError.Message);
                     }
                     else if (node.LoadedFromFile == AssemblyLoadStatus.Failed)
                     {
-                        Logger.Information("Couldn't load from file. Exception message: {ExceptionMessage}", node.LoadedFromFileError.Message);
+                        Logger.Information("Couldn't load from file. Exception message:");
+                        Logger.Information(node.LoadedFromFileError.Message);
                     }
                     else
                     {
                         throw new InvalidOperationException("Assembly not attempted to be loaded, something went wrong.");
+                    }
+
+                    Logger.Information("");
+
+                    var directDependants = graph.GetDirectDependants(node).ToList();
+                    if (directDependants.Any())
+                    {
+                        Logger.Information("Nodes that depend on this assembly directly:");
+                        foreach (var dependant in directDependants)
+                        {
+                            Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependant.Identity.Unversioned, new[] { dependant }));
+                            Logger.Information("-- {AssemblyIdentity}", dependant.Identity);
+                            Logger.Information("");
+                        }
+
+                        var indirectDependants = graph.GetIndirectDependants(node).ToList();
+                        if (indirectDependants.Any())
+                        {
+                            Logger.Information("Nodes that depend on this assembly indirectly:");
+                            foreach (var dependant in indirectDependants)
+                            {
+                                Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependant.Identity.Unversioned, new[] { dependant }));
+                                Logger.Information("-- {AssemblyIdentity}", dependant.Identity);
+                                Logger.Information("");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Logger.Information("No nodes that depend on this were found.");
                     }
 
                     Logger.Information("If this is an important reference, consider fixing this reference. Also make sure that you didn't omit it from the inputs.");
@@ -312,6 +380,7 @@ namespace BindingRedirectR
                     var otherNodesInGroup = nodesByGroup[node.Identity.Unversioned].Where(x => x != node && x.Loaded).ToList();
                     if (otherNodesInGroup.Any())
                     {
+                        Logger.Information("");
                         Logger.Information("Other versions of this assembly were loaded:");
                         foreach (var otherVersionNode in otherNodesInGroup.OrderBy(x => x.Identity.Version))
                         {
@@ -327,13 +396,13 @@ namespace BindingRedirectR
             }
         }
 
-        private static void WriteAllDependencies(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph, out HashSet<AssemblyDependencyNode> allMainDependencies)
+        private static void WriteAllDependencies(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph)
         {
             Logger.Information(Separator);
             Logger.Information("All dependencies:");
             Logger.Information("");
 
-            allMainDependencies = graph.GetAllDependencies(mainNode).ToHashSet();
+            var allMainDependencies = graph.GetAllDependencies(mainNode).ToHashSet();
             foreach (var dependencyGroup in allMainDependencies.GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
                 Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));

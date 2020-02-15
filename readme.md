@@ -1,6 +1,8 @@
 # BindingRedirectR
 
-A tool to analyse assembly dependencies, possibly generate binding redirects. It's only a proof of concept (pre-alpha) at this stage.
+A tool to analyse assembly dependencies, possibly generate binding redirects.
+
+**IMPORTANT! It's only a proof of concept (pre-alpha) at this stage.**
 
 ## Run
 

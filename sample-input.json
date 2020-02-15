@@ -1,15 +1,15 @@
 ﻿{
+  "baseDirectory": null,
   "mainAssembly": "BindingRedirectR.exe",
   "assemblies": [
-    "Serilog.dll",
-    "Serilog.Sinks.Console.dll",
-    "Serilog.Sinks.File.dll",
-    "Newtonsoft.Json.dll"
+    "Serilog*.dll",
+    "Newtonsoft.Json.dll",
+    "Microsoft.Extensions.FileSystemGlobbing.dll"
   ],
   "additionalDependencies": [
     {
       "dependant": "BindingRedirectR.exe",
-      "dependency": "System.Diagnostics.Tracing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"
+      "dependencies": [ "System.Diagnostics.Tracing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" ]
     }
   ]
 }

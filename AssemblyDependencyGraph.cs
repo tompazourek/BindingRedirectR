@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Serilog;
 
 namespace BindingRedirectR
@@ -14,31 +16,29 @@ namespace BindingRedirectR
     {
         #region Public members
 
-        public AssemblyDependencyNode EnsureNodeWithAssemblySource(string assemblySource)
+        public IList<AssemblyDependencyNode> EnsureNodeWithAssemblySourceOrPatterns(IList<string> assemblySources, DirectoryInfo baseDirectory)
+        {
+            var allNodes = new List<AssemblyDependencyNode>();
+
+            foreach (var assemblySource in assemblySources)
+            {
+                var nodes = EnsureNodeWithAssemblySourceOrPattern(assemblySource, baseDirectory);
+                allNodes.AddRange(nodes);
+            }
+
+            allNodes = allNodes.Distinct().ToList();
+            return allNodes;
+        }
+
+        public AssemblyDependencyNode EnsureNodeWithAssemblySource(string assemblySource, DirectoryInfo baseDirectory)
         {
             if (IsValidAssemblyString(assemblySource, out var name))
                 return EnsureNodeWithName(name);
 
-            if (IsValidPath(assemblySource, out var fileInfo))
+            if (IsValidPath(assemblySource, baseDirectory, out var fileInfo))
                 return EnsureNodeWithFile(fileInfo);
 
             throw new ArgumentException($"Assembly source '{assemblySource}' is not valid, it's neither a path, nor an assembly string.", nameof(assemblySource));
-        }
-
-        public AssemblyDependencyNode EnsureNodeWithName(AssemblyName name)
-        {
-            var assemblyFullName = GetKeyFromName(name);
-            var node = _nodeByName.GetOrAdd(assemblyFullName, _ => AssemblyDependencyNode.CreateFromName(name));
-            _nodes.Add(node);
-            return node;
-        }
-
-        public AssemblyDependencyNode EnsureNodeWithFile(FileInfo file)
-        {
-            var fullPath = GetKeyFromFile(file);
-            var node = _nodeByFile.GetOrAdd(fullPath, _ => AssemblyDependencyNode.CreateFromFile(file));
-            _nodes.Add(node);
-            return node;
         }
 
         public void RegisterDependency(AssemblyDependencyNode dependant, AssemblyDependencyNode dependency)
@@ -81,14 +81,14 @@ namespace BindingRedirectR
             var fileFullName = node.File.FullName;
             try
             {
-                Log.Debug("Loading from file {File}.", fileFullName);
+                Logger.Debug("Loading from file {File}.", fileFullName);
                 var assembly = AssemblyMetadataLoader.ReflectionOnlyLoadFrom(fileFullName);
                 node.MarkAsLoadedFromFile(assembly);
                 ProcessLoadedNode(node);
             }
             catch (Exception ex)
             {
-                Log.Debug(ex, "Failed to load from file {File}.", fileFullName);
+                Logger.Debug(ex, "Failed to load from file {File}.", fileFullName);
                 node.MarkAsFailedFromFile(ex);
             }
         }
@@ -113,11 +113,11 @@ namespace BindingRedirectR
 
             try
             {
-                Log.Debug("Loading from name {AssemblyName}.", assemblyString);
+                Logger.Debug("Loading from name {AssemblyName}.", assemblyString);
                 var assembly = AssemblyMetadataLoader.ReflectionOnlyLoad(node.Name);
                 if (assembly.AssemblyName != node.Name.FullName)
                 {
-                    Log.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.AssemblyName);
+                    Logger.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.AssemblyName);
                 }
 
                 node.MarkAsLoadedFromName(assembly);
@@ -125,7 +125,7 @@ namespace BindingRedirectR
             }
             catch (Exception ex)
             {
-                Log.Debug(ex, "Failed to load from name {AssemblyName}.", assemblyString);
+                Logger.Debug(ex, "Failed to load from name {AssemblyName}.", assemblyString);
                 node.MarkAsFailedFromName(ex);
             }
         }
@@ -184,13 +184,46 @@ namespace BindingRedirectR
 
         #region Private members
 
-        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
-        
+        private static readonly ILogger Logger = Log.ForContext<Program>();
+
         private readonly HashSet<AssemblyDependencyNode> _nodes = new HashSet<AssemblyDependencyNode>();
         private readonly ConcurrentDictionary<string, AssemblyDependencyNode> _nodeByName = new ConcurrentDictionary<string, AssemblyDependencyNode>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, AssemblyDependencyNode> _nodeByFile = new ConcurrentDictionary<string, AssemblyDependencyNode>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<AssemblyDependencyNode, HashSet<AssemblyDependencyNode>> _dependencyByNode = new ConcurrentDictionary<AssemblyDependencyNode, HashSet<AssemblyDependencyNode>>();
         private readonly ConcurrentDictionary<AssemblyDependencyNode, HashSet<AssemblyDependencyNode>> _dependantByNode = new ConcurrentDictionary<AssemblyDependencyNode, HashSet<AssemblyDependencyNode>>();
+
+        private IList<AssemblyDependencyNode> EnsureNodeWithAssemblySourceOrPattern(string assemblySource, DirectoryInfo baseDirectory)
+        {
+            if (IsValidAssemblyString(assemblySource, out var name))
+                return new[] { EnsureNodeWithName(name) };
+
+            if (IsValidGlobPattern(assemblySource, baseDirectory, out var fileInfos))
+            {
+                var results = fileInfos.Select(EnsureNodeWithFile).Distinct().ToList();
+                return results;
+            }
+
+            if (IsValidPath(assemblySource, baseDirectory, out var fileInfo))
+                return new[] { EnsureNodeWithFile(fileInfo) };
+
+            throw new ArgumentException($"Assembly source '{assemblySource}' is not valid, it's neither a path, nor an assembly string, nor a file globbing pattern.", nameof(assemblySource));
+        }
+
+        private AssemblyDependencyNode EnsureNodeWithName(AssemblyName name)
+        {
+            var assemblyFullName = GetKeyFromName(name);
+            var node = _nodeByName.GetOrAdd(assemblyFullName, _ => AssemblyDependencyNode.CreateFromName(name));
+            _nodes.Add(node);
+            return node;
+        }
+
+        private AssemblyDependencyNode EnsureNodeWithFile(FileInfo file)
+        {
+            var fullPath = GetKeyFromFile(file);
+            var node = _nodeByFile.GetOrAdd(fullPath, _ => AssemblyDependencyNode.CreateFromFile(file));
+            _nodes.Add(node);
+            return node;
+        }
 
         private static string GetKeyFromName(AssemblyName name) => name.FullName;
         private static string GetKeyFromFile(FileInfo file) => Path.GetFullPath(file.FullName);
@@ -216,11 +249,20 @@ namespace BindingRedirectR
             }
         }
 
-        private static bool IsValidPath(string path, out FileInfo fileInfo)
+        private static bool IsValidPath(string path, DirectoryInfo baseDirectory, out FileInfo fileInfo)
         {
             try
             {
-                fileInfo = new FileInfo(path);
+                var root = Path.GetPathRoot(path);
+                var isPathFullyQualified = root?.StartsWith(@"\\") == true || root?.EndsWith(@"\") == true;
+                if (isPathFullyQualified)
+                {
+                    fileInfo = new FileInfo(path);
+                    return true;
+                }
+
+                var fullyQualifiedPath = Path.Combine(baseDirectory.FullName, path ?? string.Empty);
+                fileInfo = new FileInfo(fullyQualifiedPath);
                 return true;
             }
             catch (Exception)
@@ -228,6 +270,41 @@ namespace BindingRedirectR
                 fileInfo = null;
                 return false;
             }
+        }
+
+        private static bool IsValidGlobPattern(string globPattern, DirectoryInfo baseDirectory, out IList<FileInfo> files)
+        {
+            files = null;
+
+            if (!globPattern.Contains('*'))
+                return false;
+
+            PatternMatchingResult patternMatchingResult;
+            try
+            {
+                var matcher = new Matcher(StringComparison.InvariantCultureIgnoreCase);
+                matcher.AddInclude(globPattern);
+                patternMatchingResult = matcher.Execute(new DirectoryInfoWrapper(baseDirectory));
+            }
+            catch
+            {
+                return false;
+            }
+
+            files = new List<FileInfo>();
+
+            if (!patternMatchingResult.HasMatches)
+                return true;
+
+            foreach (var match in patternMatchingResult.Files)
+            {
+                if (IsValidPath(match.Path, baseDirectory, out var fileInfo))
+                {
+                    files.Add(fileInfo);
+                }
+            }
+
+            return true;
         }
 
         private void ProcessLoadedNode(AssemblyDependencyNode node)
@@ -259,7 +336,7 @@ namespace BindingRedirectR
             {
                 if (previousNodeByFile.Identity != node.Identity)
                 {
-                    Log.Warning("There will be multiple nodes with the same file [{File}].", node.File.FullName);
+                    Logger.Warning("There will be multiple nodes with the same file [{File}].", node.File.FullName);
                 }
                 else
                 {
@@ -335,7 +412,7 @@ namespace BindingRedirectR
             private readonly Func<HashSet<AssemblyDependencyNode>> _nodesAccessor;
             private readonly Func<AssemblyDependencyNode, bool> _filter;
 
-            public NodesToLoadEnumerable(Func<HashSet<AssemblyDependencyNode>> nodesAccessor, Func<AssemblyDependencyNode, bool> filter)
+            internal NodesToLoadEnumerable(Func<HashSet<AssemblyDependencyNode>> nodesAccessor, Func<AssemblyDependencyNode, bool> filter)
             {
                 _nodesAccessor = nodesAccessor;
                 _filter = filter;

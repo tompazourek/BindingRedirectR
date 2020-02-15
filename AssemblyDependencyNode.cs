@@ -7,7 +7,7 @@ namespace BindingRedirectR
 {
     internal class AssemblyDependencyNode
     {
-        private static readonly ILogger Log = Serilog.Log.ForContext<Program>();
+        private static readonly ILogger Logger = Log.ForContext<Program>();
 
         public AssemblyVersionedIdentity Identity { get; private set; }
         public AssemblyMetadata Assembly { get; private set; }
@@ -25,7 +25,7 @@ namespace BindingRedirectR
         public static AssemblyDependencyNode CreateFromName(AssemblyName assemblyName)
         {
             if (assemblyName == null) throw new ArgumentNullException(nameof(assemblyName));
-            Log.Debug("Creating node from name {AssemblyName}.", assemblyName);
+            Logger.Debug("Creating node from name {AssemblyName}.", assemblyName);
             return new AssemblyDependencyNode
             {
                 Name = assemblyName,
@@ -36,7 +36,7 @@ namespace BindingRedirectR
         public static AssemblyDependencyNode CreateFromFile(FileInfo file)
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
-            Log.Debug("Creating node from file {File}.", file.FullName);
+            Logger.Debug("Creating node from file {File}.", file.FullName);
             return new AssemblyDependencyNode
             {
                 File = file,

@@ -14,7 +14,8 @@ namespace BindingRedirectR
     {
         #region Init
 
-        private static ILogger Log;
+        // ReSharper disable once InconsistentNaming
+        private static ILogger Logger;
 
         private static void Main(string[] args)
         {
@@ -23,31 +24,31 @@ namespace BindingRedirectR
             inputJsonPath = string.IsNullOrWhiteSpace(inputJsonPath) ? null : inputJsonPath;
             inputJsonPath = inputJsonPath ?? "sample-input.json";
             inputJsonPath = Path.GetFullPath(inputJsonPath);
-            
+
             // clear log file initially
             var outputLogPath = $"{inputJsonPath}.log";
             File.Delete(outputLogPath);
-            
+
             // set up logging
-            Log = (Serilog.Log.Logger = new LoggerConfiguration()
+            Logger = (Log.Logger = new LoggerConfiguration()
                     .MinimumLevel.Verbose()
                     .WriteTo.Console()
                     .WriteTo.File(outputLogPath)
                     .CreateLogger())
                 .ForContext<Program>();
-            
+
             // set up unhandled exceptions
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
-                Log.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
+                Logger.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
                 ExitWithKeyPress();
                 Environment.Exit(1);
             };
 
             // parse inputs
-            Log.Information("Input file: {File}", inputJsonPath);
-            Log.Information("Output log: {File}", outputLogPath);
-            Log.Information(Separator);
+            Logger.Information("Input file: {File}", inputJsonPath);
+            Logger.Information("Output log: {File}", outputLogPath);
+            Logger.Information(Separator);
             var inputParameters = JsonConvert.DeserializeObject<InputParameters>(File.ReadAllText(inputJsonPath));
 
             // run
@@ -61,10 +62,11 @@ namespace BindingRedirectR
         {
             if (Debugger.IsAttached)
             {
-                Log.Information("Press any key to exit.");
+                Logger.Information("Press any key to exit.");
                 ReadKey();
             }
-            Serilog.Log.CloseAndFlush();
+
+            Log.CloseAndFlush();
         }
 
         #endregion
@@ -73,26 +75,33 @@ namespace BindingRedirectR
 
         private static void Run(InputParameters inputParameters)
         {
-            Log.Information("Run started.");
-            Log.Information(Separator);
+            Logger.Information("Run started.");
+            Logger.Information(Separator);
 
             var graph = new AssemblyDependencyGraph();
 
+            var baseDirectory = string.IsNullOrEmpty(inputParameters.BaseDirectory)
+                ? new DirectoryInfo(Environment.CurrentDirectory)
+                : new DirectoryInfo(inputParameters.BaseDirectory);
+
+            if (!baseDirectory.Exists)
+                throw new DirectoryNotFoundException($"The base directory '{baseDirectory.FullName}' was not found.");
+
             // register assembly sources
-            foreach (var assemblySource in inputParameters.Assemblies)
-            {
-                graph.EnsureNodeWithAssemblySource(assemblySource);
-            }
+            graph.EnsureNodeWithAssemblySourceOrPatterns(inputParameters.Assemblies, baseDirectory);
 
             // register main assembly
-            graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly);
+            graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly, baseDirectory);
 
             // register additional dependencies
-            foreach (var additionalDependency in inputParameters.AdditionalDependencies ?? Enumerable.Empty<InputParameters.ManualDependency>())
+            foreach (var additionalDependency in inputParameters.AdditionalDependencies ?? Enumerable.Empty<InputParameters.AdditionalDependency>())
             {
-                var dependant = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependant);
-                var dependency = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependency);
-                graph.RegisterDependency(dependant, dependency);
+                var dependant = graph.EnsureNodeWithAssemblySource(additionalDependency.Dependant, baseDirectory);
+                var dependencies = graph.EnsureNodeWithAssemblySourceOrPatterns(additionalDependency.Dependencies, baseDirectory);
+                foreach (var dependency in dependencies)
+                {
+                    graph.RegisterDependency(dependant, dependency);
+                }
             }
 
             // load assemblies from files
@@ -107,17 +116,17 @@ namespace BindingRedirectR
                 graph.LoadNodeFromName(node);
             }
 
-            Log.Information(Separator);
-            Log.Information("Entire graph processed.");
+            Logger.Information(Separator);
+            Logger.Information("Entire graph processed.");
 
             // locate the main assembly
-            var mainNode = graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly);
+            var mainNode = graph.EnsureNodeWithAssemblySource(inputParameters.MainAssembly, baseDirectory);
 
             // write report
             WriteReport(mainNode, graph);
 
-            Log.Information(Separator);
-            Log.Information("Run finished.");
+            Logger.Information(Separator);
+            Logger.Information("Run finished.");
         }
 
         #endregion
@@ -126,8 +135,8 @@ namespace BindingRedirectR
 
         private static void WriteReport(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph)
         {
-            Log.Information(Separator);
-            Log.Information("Overview for [{AssemblyName}]", mainNode.Name);
+            Logger.Information(Separator);
+            Logger.Information("Overview for [{AssemblyName}]", mainNode.Name);
 
             WriteDirectDependencies(mainNode, graph);
             WriteIndirectDependencies(mainNode, graph);
@@ -155,55 +164,55 @@ namespace BindingRedirectR
 
             if (dependenciesGrouped.Any())
             {
-                Log.Information(Separator);
-                Log.Information("Recommended binding redirects:");
+                Logger.Information(Separator);
+                Logger.Information("Recommended binding redirects:");
                 var dependentAssemblyTriples = new List<(AssemblyUnversionedIdentity Key, Version highestVersion, Version highestVersionLoaded)>();
 
                 foreach (var group in dependenciesGrouped)
                 {
-                    Log.Information(Separator);
-                    Log.Information("{AssemblyName}", group.Key.ToString());
+                    Logger.Information(Separator);
+                    Logger.Information("{AssemblyName}", group.Key.ToString());
 
-                    Log.Information("Versions:");
+                    Logger.Information("Versions:");
                     foreach (var node in group.OrderBy(x => x.Identity.Version))
                     {
                         if (node.Loaded)
                         {
-                            Log.Information("{Version} [Location=\"{Location}\"]", node.Identity.Version, node.File.FullName);
+                            Logger.Information("{Version} [Location=\"{Location}\"]", node.Identity.Version, node.File.FullName);
                         }
                         else
                         {
-                            Log.Warning("{Version} [Not Found]", node.Identity.Version);
+                            Logger.Warning("{Version} [Not Found]", node.Identity.Version);
                         }
                     }
 
-                    Log.Information("Recommended redirect:");
+                    Logger.Information("Recommended redirect:");
                     var highestVersion = group.Max(x => x.Identity.Version);
                     var highestVersionLoaded = group.Where(x => x.Loaded).Max(x => x.Identity.Version);
 
                     if (highestVersionLoaded < highestVersion)
                     {
-                        Log.Warning("WARNING: Recommending a downgrading redirect.");
+                        Logger.Warning("WARNING: Recommending a downgrading redirect.");
                     }
 
                     var dependentAssemblyTriple = (group.Key, highestVersion, highestVersionLoaded);
                     var element = GetAssemblyBindingXElement(dependentAssemblyTriple);
-                    Log.Information("\n{Element}", element);
+                    Logger.Information("\n{Element}", element);
                     dependentAssemblyTriples.Add(dependentAssemblyTriple);
                 }
 
                 if (dependenciesGrouped.Count > 1)
                 {
-                    Log.Information(Separator);
-                    Log.Information("Collected binding redirects:");
+                    Logger.Information(Separator);
+                    Logger.Information("Collected binding redirects:");
                     var element = GetAssemblyBindingXElement(dependentAssemblyTriples.ToArray());
-                    Log.Information("\n{Element}", element);
+                    Logger.Information("\n{Element}", element);
                 }
             }
             else
             {
-                Log.Information(Separator);
-                Log.Information("No recommended binding redirects.");
+                Logger.Information(Separator);
+                Logger.Information("No recommended binding redirects.");
             }
         }
 
@@ -212,12 +221,12 @@ namespace BindingRedirectR
             var nodesOutsideOfDependencyTree = nodes.Where(x => x != mainNode && !allMainDependencies.Contains(x)).ToList();
             if (nodesOutsideOfDependencyTree.Any())
             {
-                Log.Information(Separator);
-                Log.Information("All assemblies that aren't in any way connected to the main:");
+                Logger.Information(Separator);
+                Logger.Information("All assemblies that aren't in any way connected to the main:");
 
                 foreach (var node in nodesOutsideOfDependencyTree)
                 {
-                    Log.Warning("{AssemblyName}", node.Name.FullName);
+                    Logger.Warning("{AssemblyName}", node.Name.FullName);
                 }
             }
         }
@@ -227,16 +236,16 @@ namespace BindingRedirectR
             var otherLeafNodes = nodes.Where(x => x != mainNode && !graph.GetDirectDependants(x).Any()).ToList();
             if (otherLeafNodes.Any())
             {
-                Log.Information(Separator);
-                Log.Information("Other assemblies that don't have any dependants:");
+                Logger.Information(Separator);
+                Logger.Information("Other assemblies that don't have any dependants:");
 
                 foreach (var node in otherLeafNodes)
                 {
-                    Log.Warning("{AssemblyName}", node.Name.FullName);
+                    Logger.Warning("{AssemblyName}", node.Name.FullName);
                 }
 
-                Log.Information("If these assemblies relate to the main assembly dynamically, you can add them as a manual reference on input.");
-                Log.Information("If these are not loaded dynamically, they might also redundant.");
+                Logger.Information("If these assemblies relate to the main assembly dynamically, you can add them as a manual reference on input.");
+                Logger.Information("If these are not loaded dynamically, they might also redundant.");
             }
         }
 
@@ -245,13 +254,13 @@ namespace BindingRedirectR
             var mainNodeDependants = graph.GetDirectDependants(mainNode).OrderBy(x => x.Identity).ToList();
             if (mainNodeDependants.Any())
             {
-                Log.Information(Separator);
-                Log.Warning("WARNING: Detected that there are still some assemblies that depend on the main assembly. Try to avoid this scenario. Different binding redirects might be needed for them.");
+                Logger.Information(Separator);
+                Logger.Warning("WARNING: Detected that there are still some assemblies that depend on the main assembly. Try to avoid this scenario. Different binding redirects might be needed for them.");
                 foreach (var node in mainNodeDependants)
                 {
-                    Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
-                    Log.Information("-- {AssemblyIdentity}", node.Identity);
-                    Log.Information("");
+                    Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
+                    Logger.Information("-- {AssemblyIdentity}", node.Identity);
+                    Logger.Information("");
                 }
             }
         }
@@ -261,14 +270,14 @@ namespace BindingRedirectR
             var loadedNodesDifferentVersion = nodes.Where(x => x.Loaded && x.Name.FullName != x.Assembly.AssemblyName).ToList();
             if (loadedNodesDifferentVersion.Any())
             {
-                Log.Information(Separator);
-                Log.Information("Assemblies that were redirected to a different version upon loading:");
+                Logger.Information(Separator);
+                Logger.Information("Assemblies that were redirected to a different version upon loading:");
 
                 foreach (var node in loadedNodesDifferentVersion)
                 {
-                    Log.Information(Separator);
-                    Log.Warning("Requested: {AssemblyName}", node.Name.FullName);
-                    Log.Warning("Resolved to: {AssemblyName}", node.Assembly.AssemblyName);
+                    Logger.Information(Separator);
+                    Logger.Warning("Requested: {AssemblyName}", node.Name.FullName);
+                    Logger.Warning("Resolved to: {AssemblyName}", node.Assembly.AssemblyName);
                 }
             }
         }
@@ -279,52 +288,52 @@ namespace BindingRedirectR
             var nodesNotLoaded = nodes.Where(node => !node.Loaded).ToList();
             if (nodesNotLoaded.Any())
             {
-                Log.Information(Separator);
-                Log.Information("Assemblies that couldn't be loaded:");
+                Logger.Information(Separator);
+                Logger.Information("Assemblies that couldn't be loaded:");
 
                 foreach (var node in nodesNotLoaded)
                 {
-                    Log.Information(Separator);
+                    Logger.Information(Separator);
 
                     if (node.Name != null)
                     {
-                        Log.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
-                        Log.Information("-- {AssemblyIdentity}", node.Identity);
+                        Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(node.Identity.Unversioned, new[] { node }));
+                        Logger.Information("-- {AssemblyIdentity}", node.Identity);
                     }
                     else
                     {
-                        Log.Information("{File}", node.File.FullName);
+                        Logger.Information("{File}", node.File.FullName);
                     }
 
-                    Log.Information("");
+                    Logger.Information("");
 
                     if (node.LoadedFromName == AssemblyLoadStatus.Failed)
                     {
-                        Log.Information("Couldn't load from assembly name. Exception message: {ExceptionMessage}", node.LoadedFromNameError.Message);
+                        Logger.Information("Couldn't load from assembly name. Exception message: {ExceptionMessage}", node.LoadedFromNameError.Message);
                     }
                     else if (node.LoadedFromFile == AssemblyLoadStatus.Failed)
                     {
-                        Log.Information("Couldn't load from file. Exception message: {ExceptionMessage}", node.LoadedFromFileError.Message);
+                        Logger.Information("Couldn't load from file. Exception message: {ExceptionMessage}", node.LoadedFromFileError.Message);
                     }
                     else
                     {
                         throw new InvalidOperationException("Assembly not attempted to be loaded, something went wrong.");
                     }
 
-                    Log.Information("If this is an important reference, consider fixing this reference. Also make sure that you didn't omit it from the inputs.");
+                    Logger.Information("If this is an important reference, consider fixing this reference. Also make sure that you didn't omit it from the inputs.");
 
                     var otherNodesInGroup = nodesByGroup[node.Identity.Unversioned].Where(x => x != node && x.Loaded).ToList();
                     if (otherNodesInGroup.Any())
                     {
-                        Log.Information("Other versions of this assembly were loaded:");
+                        Logger.Information("Other versions of this assembly were loaded:");
                         foreach (var otherVersionNode in otherNodesInGroup.OrderBy(x => x.Identity.Version))
                         {
-                            Log.Information("{Version}", otherVersionNode.Identity.Version);
+                            Logger.Information("{Version}", otherVersionNode.Identity.Version);
                         }
 
                         if (otherNodesInGroup.All(x => x.Identity.Version < node.Identity.Version))
                         {
-                            Log.Warning("WARNING: This is the highest version of the assembly, yet it wasn't loaded. A downgrading binding redirect might be needed.");
+                            Logger.Warning("WARNING: This is the highest version of the assembly, yet it wasn't loaded. A downgrading binding redirect might be needed.");
                         }
                     }
                 }
@@ -333,53 +342,56 @@ namespace BindingRedirectR
 
         private static void WriteAllDependencies(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph, out HashSet<AssemblyDependencyNode> allMainDependencies)
         {
-            Log.Information(Separator);
-            Log.Information("All dependencies:");
-            Log.Information("");
+            Logger.Information(Separator);
+            Logger.Information("All dependencies:");
+            Logger.Information("");
 
             allMainDependencies = graph.GetAllDependencies(mainNode).ToHashSet();
             foreach (var dependencyGroup in allMainDependencies.GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
-                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
                 foreach (var node in dependencyGroup)
                 {
-                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                    Logger.Information("-- {AssemblyIdentity}", node.Identity);
                 }
-                Log.Information("");
+
+                Logger.Information("");
             }
         }
 
         private static void WriteIndirectDependencies(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph)
         {
-            Log.Information(Separator);
-            Log.Information("Indirect dependencies:");
-            Log.Information("");
+            Logger.Information(Separator);
+            Logger.Information("Indirect dependencies:");
+            Logger.Information("");
 
             foreach (var dependencyGroup in graph.GetIndirectDependencies(mainNode).GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
-                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
                 foreach (var node in dependencyGroup)
                 {
-                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                    Logger.Information("-- {AssemblyIdentity}", node.Identity);
                 }
-                Log.Information("");
+
+                Logger.Information("");
             }
         }
 
         private static void WriteDirectDependencies(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph)
         {
-            Log.Information(Separator);
-            Log.Information("Direct dependencies:");
-            Log.Information("");
+            Logger.Information(Separator);
+            Logger.Information("Direct dependencies:");
+            Logger.Information("");
 
             foreach (var dependencyGroup in graph.GetDirectDependencies(mainNode).GroupBy(x => x.Identity.Unversioned).OrderBy(x => x.Key))
             {
-                Log.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
+                Logger.Information("{AssemblyNameWithVersion}", GetSimpleName(dependencyGroup.Key, dependencyGroup.ToList()));
                 foreach (var node in dependencyGroup)
                 {
-                    Log.Information("-- {AssemblyIdentity}", node.Identity);
+                    Logger.Information("-- {AssemblyIdentity}", node.Identity);
                 }
-                Log.Information("");
+
+                Logger.Information("");
             }
         }
 
@@ -399,9 +411,9 @@ namespace BindingRedirectR
             foreach (var dependentAssembly in dependentAssemblies)
             {
                 var dependentAssemlyElement = GetDependentAssemblyXElement(dependentAssembly.unversionedIdentity, dependentAssembly.highestOldVersion, dependentAssembly.newVersion);
-                assemblyBindingElement.Add(dependentAssemlyElement);    
+                assemblyBindingElement.Add(dependentAssemlyElement);
             }
-            
+
             return assemblyBindingElement;
         }
 

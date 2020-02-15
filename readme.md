@@ -16,20 +16,20 @@ The `input.json` file looks something like this:
 
 ```
 {
+  "baseDirectory": null,
   "mainAssembly": "BindingRedirectR.exe",
   "assemblies": [
-    "Serilog.dll",
-    "Serilog.Sinks.Console.dll",
-    "Serilog.Sinks.File.dll",
-    "Newtonsoft.Json.dll"
+    "Serilog*.dll",
+    "Newtonsoft.Json.dll",
+    "Microsoft.Extensions.FileSystemGlobbing.dll"
   ],
   "additionalDependencies": [
     {
       "dependant": "BindingRedirectR.exe",
-      "dependency": "System.Diagnostics.Tracing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"
+      "dependencies": [ "System.Diagnostics.Tracing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" ]
     }
   ]
 }
 ```
 
-The assemnly strings can be either file paths or fully qualified assembly names.
+The assembly strings can be either file paths, file globbing patterns, or fully qualified assembly names.

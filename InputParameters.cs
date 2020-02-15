@@ -6,25 +6,39 @@ namespace BindingRedirectR
     {
         /// <summary>
         /// Main assembly for which to consider the dependency tree.
-        /// Either a file path, or a fully qualified assembly name.
+        /// Either a file path or a fully qualified assembly name.
         /// </summary>
         public string MainAssembly { get; set; }
 
         /// <summary>
-        /// All assemblies to load.
-        /// Either a file path, or a fully qualified assembly name.
+        /// Base directory from which the relative paths will be executed.
         /// </summary>
-        public IList<string> Assemblies { get; set; }
+        public string BaseDirectory { get; set; }
+
+        /// <summary>
+        /// All assemblies to load.
+        /// Either a file path, file path pattern, or a fully qualified assembly name.
+        /// </summary>
+        public IList<string> Assemblies { get; set; } = new List<string>();
 
         /// <summary>
         /// Additional dependencies that aren't detected in the assemblies manifest, but we want to consider.
         /// </summary>
-        public IList<ManualDependency> AdditionalDependencies { get; } = new List<ManualDependency>();
+        public IList<AdditionalDependency> AdditionalDependencies { get; } = new List<AdditionalDependency>();
         
-        public class ManualDependency
+        public class AdditionalDependency
         {
+            /// <summary>
+            /// Assembly that depends on the listed dependencies.
+            /// Either a file path or a fully qualified assembly name.
+            /// </summary>
             public string Dependant { get; set; }
-            public string Dependency { get; set; }
+
+            /// <summary>
+            /// Dependencies.
+            /// Either a file path, file path pattern, or a fully qualified assembly name.
+            /// </summary>
+            public IList<string> Dependencies { get; set; } = new List<string>();
         }
     }
 }

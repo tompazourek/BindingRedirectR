@@ -41,7 +41,7 @@ namespace BindingRedirectR
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 Logger.Error(e.ExceptionObject as Exception, "Unhandled exception occurred.");
-                ExitWithKeyPress();
+                Log.CloseAndFlush();
                 Environment.Exit(1);
             };
 
@@ -53,19 +53,6 @@ namespace BindingRedirectR
 
             // run
             Run(inputParameters);
-
-            ExitWithKeyPress();
-            ReadKey();
-        }
-
-        private static void ExitWithKeyPress()
-        {
-            if (Debugger.IsAttached)
-            {
-                Logger.Information("Press any key to exit.");
-                ReadKey();
-            }
-
             Log.CloseAndFlush();
         }
 

@@ -121,7 +121,7 @@ namespace BindingRedirectR
         private static void WriteReport(AssemblyDependencyNode mainNode, AssemblyDependencyGraph graph)
         {
             Logger.Information(Separator);
-            Logger.Information("Overview for [{AssemblyName}]", mainNode.Name);
+            Logger.Information("Overview for [{AssemblyName}]", mainNode.Name?.ToString() ?? mainNode.File.Name);
 
             WriteDirectDependencies(mainNode, graph);
             WriteIndirectDependencies(mainNode, graph);
@@ -291,7 +291,7 @@ namespace BindingRedirectR
 
                 foreach (var node in otherLeafNodes)
                 {
-                    Logger.Warning("{AssemblyName}", node.Name.FullName);
+                    Logger.Warning("{AssemblyName}", node.Name?.FullName ?? node.File.Name);
                 }
 
                 Logger.Information("If these assemblies relate to some assembly dynamically, you can add them as an additional dependency on input.");
@@ -324,7 +324,7 @@ namespace BindingRedirectR
                 foreach (var node in loadedNodesDifferentVersion)
                 {
                     Logger.Information(Separator);
-                    Logger.Warning("Requested: {AssemblyName}", node.Name.FullName);
+                    Logger.Warning("Requested: {AssemblyName}", node.Name?.FullName ?? node.File.Name);
                     Logger.Warning("Resolved to: {AssemblyName}", node.Assembly.AssemblyName);
                 }
             }
@@ -501,8 +501,9 @@ namespace BindingRedirectR
             var dependentAssemlyElement = new XElement(ns + "dependentAssembly");
 
             var assemblyIdentityElement = new XElement(ns + "assemblyIdentity");
+
             assemblyIdentityElement.Add(new XAttribute("name", unversionedIdentity.Name));
-            assemblyIdentityElement.Add(new XAttribute("publicKeyToken", unversionedIdentity.PublicKeyToken));
+            assemblyIdentityElement.Add(new XAttribute("publicKeyToken", unversionedIdentity.PublicKeyToken ?? "null"));
             assemblyIdentityElement.Add(new XAttribute("culture", unversionedIdentity.Culture));
             dependentAssemlyElement.Add(assemblyIdentityElement);
 

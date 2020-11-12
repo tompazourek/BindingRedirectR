@@ -23,6 +23,24 @@ namespace BindingRedirectR
                 return assemblyMetadata;
             }
         }
+        
+        public static AssemblyMetadata LoadFrom(string path)
+        {
+            using (var tempAppDomain = new TempAppDomain())
+            {
+                var assemblyMetadata = tempAppDomain.LoadFrom(path);
+                return assemblyMetadata;
+            }
+        }
+
+        public static AssemblyMetadata Load(AssemblyName name)
+        {
+            using (var tempAppDomain = new TempAppDomain())
+            {
+                var assemblyMetadata = tempAppDomain.Load(name.FullName);
+                return assemblyMetadata;
+            }
+        }
 
         private class TempAppDomain : IDisposable
         {
@@ -61,6 +79,12 @@ namespace BindingRedirectR
 
             public AssemblyMetadata ReflectionOnlyLoad(string assemblyName)
                 => _loaderProxy.ReflectionOnlyLoad(assemblyName);
+            
+            public AssemblyMetadata LoadFrom(string path)
+                => _loaderProxy.LoadFrom(path);
+
+            public AssemblyMetadata Load(string assemblyName)
+                => _loaderProxy.Load(assemblyName);
 
             public void Dispose()
             {
@@ -81,6 +105,20 @@ namespace BindingRedirectR
             public AssemblyMetadata ReflectionOnlyLoad(string assemblyName)
             {
                 var assembly = Assembly.ReflectionOnlyLoad(assemblyName);
+                var assemblyMetadata = new AssemblyMetadata(assembly);
+                return assemblyMetadata;
+            }
+
+            public AssemblyMetadata LoadFrom(string path)
+            {
+                var assembly = Assembly.LoadFrom(path);
+                var assemblyMetadata = new AssemblyMetadata(assembly);
+                return assemblyMetadata;
+            }
+
+            public AssemblyMetadata Load(string assemblyName)
+            {
+                var assembly = Assembly.Load(assemblyName);
                 var assemblyMetadata = new AssemblyMetadata(assembly);
                 return assemblyMetadata;
             }

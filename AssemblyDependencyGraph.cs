@@ -82,7 +82,7 @@ namespace BindingRedirectR
             try
             {
                 Logger.Debug("Loading from file {File}.", fileFullName);
-                var assembly = AssemblyMetadataLoader.ReflectionOnlyLoadFrom(fileFullName);
+                var assembly = AssemblyMetadataLoader.LoadFrom(fileFullName);
                 node.MarkAsLoadedFromFile(assembly);
                 ProcessLoadedNode(node);
             }
@@ -114,7 +114,7 @@ namespace BindingRedirectR
             try
             {
                 Logger.Debug("Loading from name {AssemblyName}.", assemblyString);
-                var assembly = AssemblyMetadataLoader.ReflectionOnlyLoad(node.Name);
+                var assembly = AssemblyMetadataLoader.Load(node.Name);
                 if (assembly.AssemblyName != node.Name.FullName)
                 {
                     Logger.Warning("Requesting the load of [{RequestedAssemblyName}], but obtained [{LoadedAssemblyName}].", node.Name.FullName, assembly.AssemblyName);

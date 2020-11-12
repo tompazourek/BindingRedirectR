@@ -520,7 +520,7 @@ namespace BindingRedirectR
             if (nodes.Any(x => x.Identity.Version != VersionZero))
             {
                 var versionsOrdered = nodes.Select(x => x.Identity.Version).OrderBy(x => x);
-                var versionsJoined = string.Join(", ", versionsOrdered.Select(x => x.ToString()));
+                var versionsJoined = string.Join(", ", versionsOrdered.Select(x => x?.ToString() ?? "unknown"));
                 versionString = $" [{versionsJoined}]";
             }
 
